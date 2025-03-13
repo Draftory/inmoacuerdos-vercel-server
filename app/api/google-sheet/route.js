@@ -1,35 +1,35 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
-import path from 'path';
-import fs from 'fs';
+
+// Define CORS headers
+const headers = {
+  'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com/', // Modify this to be more restrictive if needed
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE', // Allow specific methods
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Allow specific headers
+};
 
 export async function GET() {
   console.log("Starting API request to Google Sheets");
 
-  // Define CORS headers
-  const headers = {
-    'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com/', // Allow requests from any origin, modify this to be more restrictive if needed
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE', // Allow specific methods
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Allow specific headers
-  };
-
   try {
+    // Retrieve the Google service account credentials from environment variable
     const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
     if (!googleCredentialsBase64) {
       throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
     }
 
-    // Decode the base64 string and write it to a temporary file
+    // Decode the Base64 string into JSON
     const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
-    const keyFilePath = path.join(process.cwd(), 'google-service-account.json');
-    fs.writeFileSync(keyFilePath, googleCredentialsJson);
 
-    console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and saved to", keyFilePath);
+    // Parse the JSON string to an object
+    const credentials = JSON.parse(googleCredentialsJson);
+
+    console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and ready for use");
 
     // Authenticate with Google Sheets API using Service Account
     const auth = new google.auth.GoogleAuth({
-      keyFile: keyFilePath,
+      credentials,  // Use the credentials directly from memory
       scopes: 'https://www.googleapis.com/auth/spreadsheets.readonly',
     });
 
@@ -41,7 +41,7 @@ export async function GET() {
     // Attempt to fetch data from the specified Google Sheet
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
-      range: 'Clausulas-locacion-vivienda', // Change range if necessary
+      range: 'Clausulas-locacion-vivienda', // Adjust the range if needed
     });
 
     console.log("Fetched Google Sheets data:", response.data);
@@ -51,7 +51,7 @@ export async function GET() {
   } catch (error) {
     console.error("Error fetching data from Google Sheets:", error);
 
-    // Return a generic error with the CORS headers
+    // Return a generic error response with the CORS headers
     return NextResponse.error({ status: 500, headers });
   }
 }
