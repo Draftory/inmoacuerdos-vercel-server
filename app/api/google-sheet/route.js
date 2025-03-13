@@ -2,7 +2,19 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import path from 'path';
 
-export async function GET() {
+export async function GET(req) {
+  // Set CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com/', // Allows all domains to access
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', // Allow methods
+    'Access-Control-Allow-Headers': 'Content-Type', // Allow headers
+  };
+
+  // Handle preflight request (OPTIONS request)
+  if (req.method === 'OPTIONS') {
+    return NextResponse.json({}, { status: 200, headers });
+  }
+
   console.log("Starting API request to Google Sheets");
 
   try {
@@ -33,7 +45,7 @@ export async function GET() {
 
     console.log("Fetched Google Sheets data:", response.data);
 
-    return NextResponse.json(response.data);
+    return NextResponse.json(response.data, { headers });
   } catch (error) {
     console.error("Error fetching data from Google Sheets:", error);
     return NextResponse.error(); // Send a generic error response to the client
