@@ -1,30 +1,31 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import path from 'path';
+import fs from 'fs';
 
-export async function GET(req) {
-  // Set CORS headers
-  const headers = {
-    'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com/', // Allows all domains to access
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', // Allow methods
-    'Access-Control-Allow-Headers': 'Content-Type', // Allow headers
-  };
-
-  // Handle preflight request (OPTIONS request)
-  if (req.method === 'OPTIONS') {
-    return NextResponse.json({}, { status: 200, headers });
-  }
-
+export async function GET() {
   console.log("Starting API request to Google Sheets");
 
-  try {
-    // Log environment variables to ensure they are set
-    console.log("GOOGLE_APPLICATION_CREDENTIALS:", process.env.GOOGLE_APPLICATION_CREDENTIALS);
-    console.log("SHEET_ID:", process.env.SHEET_ID);
+  // Define CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com/', // Allow requests from any origin, modify this to be more restrictive if needed
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE', // Allow specific methods
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Allow specific headers
+  };
 
-    // Ensure the keyFile path is correct
-    const keyFilePath = path.join(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS);
-    console.log("Key file path:", keyFilePath);
+  try {
+    const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+
+    if (!googleCredentialsBase64) {
+      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+    }
+
+    // Decode the base64 string and write it to a temporary file
+    const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
+    const keyFilePath = path.join(process.cwd(), 'google-service-account.json');
+    fs.writeFileSync(keyFilePath, googleCredentialsJson);
+
+    console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and saved to", keyFilePath);
 
     // Authenticate with Google Sheets API using Service Account
     const auth = new google.auth.GoogleAuth({
@@ -45,9 +46,12 @@ export async function GET(req) {
 
     console.log("Fetched Google Sheets data:", response.data);
 
+    // Return the response with the appropriate CORS headers
     return NextResponse.json(response.data, { headers });
   } catch (error) {
     console.error("Error fetching data from Google Sheets:", error);
-    return NextResponse.error(); // Send a generic error response to the client
+
+    // Return a generic error with the CORS headers
+    return NextResponse.error({ status: 500, headers });
   }
 }
