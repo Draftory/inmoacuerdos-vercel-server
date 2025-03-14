@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import Cors from 'cors';
+import Cors from "cors";
 
 // Initialize CORS middleware
 const cors = Cors({
@@ -21,7 +21,11 @@ export default async function handler(req, res) {
 
   // Handle OPTIONS request for preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    // Send response with appropriate CORS headers
+    res.setHeader('Access-Control-Allow-Origin', 'https://www.inmoacuerdos.com');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    return res.status(204).end();
   }
 
   // Handle POST request
