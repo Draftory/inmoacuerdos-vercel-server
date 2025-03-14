@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 // Define CORS headers
 const headers = {
   'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com', // Modify this to be more restrictive if needed
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE', // Allow specific methods
+  'Access-Control-Allow-Methods': 'GET', // Allow specific methods
   'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Allow specific headers
 };
 
