@@ -17,13 +17,18 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type'],
+  methods: ['GET', 'POST', 'OPTIONS'], // Ensure OPTIONS method is allowed
+  allowedHeaders: ['Content-Type', 'Authorization'], // Allow necessary headers
 };
 
 export default async function handler(req, res) {
   // Apply CORS middleware before handling the request
   cors(corsOptions)(req, res, async () => {
+    // Handle preflight (OPTIONS) requests separately
+    if (req.method === "OPTIONS") {
+      return res.status(200).end(); // Respond with status 200 for OPTIONS requests
+    }
+
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method Not Allowed" });
     }
