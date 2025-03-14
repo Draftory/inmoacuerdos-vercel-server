@@ -3,33 +3,27 @@ import Cors from "cors";
 
 // Initialize CORS middleware
 const cors = Cors({
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedOrigins: [
-    'https://www.inmoacuerdos.com',
-    'https://inmoacuerdos.webflow.io',
+  methods: ["POST"],
+  origin: [
+    "https://www.inmoacuerdos.com",
+    "https://inmoacuerdos.webflow.io",
   ],
+  allowedHeaders: ["Content-Type"],
 });
 
 export default async function handler(req, res) {
   // Run CORS middleware
-  await new Promise((resolve, reject) => cors(req, res, (result) => {
-    if (result instanceof Error) {
-      return reject(result);
-    }
-    resolve(result);
-  }));
-
-  // Handle OPTIONS request for preflight
-  if (req.method === 'OPTIONS') {
-    // Send response with appropriate CORS headers
-    res.setHeader('Access-Control-Allow-Origin', 'https://www.inmoacuerdos.com');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    return res.status(204).end();
-  }
+  await new Promise((resolve, reject) =>
+    cors(req, res, (result) => {
+      if (result instanceof Error) {
+        return reject(result);
+      }
+      resolve(result);
+    })
+  );
 
   // Handle POST request
-  if (req.method === 'POST') {
+  if (req.method === "POST") {
     try {
       // Decode Google Service Account Credentials
       const credentials = JSON.parse(
@@ -73,7 +67,9 @@ export default async function handler(req, res) {
       }
 
       // Check if contractID already exists in any row
-      const existingRowIndex = rows.findIndex(row => row[contractIDColumnIndex] === contractID);
+      const existingRowIndex = rows.findIndex(
+        (row) => row[contractIDColumnIndex] === contractID
+      );
 
       if (existingRowIndex === -1) {
         // Contract ID doesn't exist, create a new row
@@ -91,7 +87,9 @@ export default async function handler(req, res) {
       } else {
         // Contract ID exists, update the existing row
         const updatedRow = Object.values(formData);
-        const updateRange = `${sheetName}!A${existingRowIndex + 1}:Z${existingRowIndex + 1}`; // Update the row corresponding to contractID
+        const updateRange = `<span class="math-inline">\{sheetName\}\!A</span>{
+          existingRowIndex + 1
+        }:Z${existingRowIndex + 1}`; // Update the row corresponding to contractID
 
         await sheets.spreadsheets.values.update({
           spreadsheetId,
