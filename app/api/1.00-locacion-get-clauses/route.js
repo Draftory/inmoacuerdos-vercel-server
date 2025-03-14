@@ -1,17 +1,26 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 
-// Define CORS headers
-const headers = {
-  'Access-Control-Allow-Origin': 'https://www.inmoacuerdos.com, https://inmoacuerdos.webflow.io/', // Modify this to be more restrictive if needed
-  'Access-Control-Allow-Methods': 'GET', // Allow specific methods
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Allow specific headers
-};
+// List of allowed origins
+const allowedOrigins = [
+  'https://www.inmoacuerdos.com',
+  'https://inmoacuerdos.webflow.io'
+];
 
-export async function GET() {
+export async function GET(req) {
   console.log("Starting API request to Google Sheets");
 
   try {
+    // Retrieve the request origin
+    const origin = req.headers.get('origin');
+
+    // Define CORS headers dynamically based on the request origin
+    const headers = {
+      'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0], // Use the first allowed origin as fallback
+      'Access-Control-Allow-Methods': 'GET',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
     // Retrieve the Google service account credentials from environment variable
     const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
@@ -29,7 +38,7 @@ export async function GET() {
 
     // Authenticate with Google Sheets API using Service Account
     const auth = new google.auth.GoogleAuth({
-      credentials,  // Use the credentials directly from memory
+      credentials, // Use the credentials directly from memory
       scopes: 'https://www.googleapis.com/auth/spreadsheets.readonly',
     });
 
