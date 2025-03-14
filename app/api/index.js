@@ -2,18 +2,19 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-app.use(express.json());
+const allowedOrigins = [
+  'https://www.inmoacuerdos.com',
+  'https://inmoacuerdos.webflow.io'
+];
 
-app.use(cors({
-  origin: [
-    'https://www.inmoacuerdos.com',
-    'https://inmoacuerdos.webflow.io'
-  ]
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
 
-app.post('/app/api/1.00-locacion-post-draft-final', (req, res) => {
-  console.log('Received data:', req.body);
-  res.json({ message: 'Data received successfully!' });
-});
-
-module.exports = app;
+app.use(cors(corsOptions));
