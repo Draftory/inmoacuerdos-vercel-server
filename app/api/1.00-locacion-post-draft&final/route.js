@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   cors(corsOptions)(req, res, async () => {
     // Handle preflight (OPTIONS) requests separately
     if (req.method === "OPTIONS") {
-      return res.status(200).end(); // Respond with status 200 for OPTIONS requests
+      return res.status(200).send(''); // Respond with status 200 for OPTIONS requests
     }
 
     if (req.method !== "POST") {
