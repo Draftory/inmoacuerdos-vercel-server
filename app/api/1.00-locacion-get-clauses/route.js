@@ -49,7 +49,7 @@ export async function GET(req) {
 
     // Attempt to fetch data from the specified Google Sheet
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.SHEET_ID,
+      spreadsheetId: process.env.locacion_get_clauses_SHEET_ID,
       range: 'Clausulas-locacion-vivienda', // Adjust the range if needed
     });
 
