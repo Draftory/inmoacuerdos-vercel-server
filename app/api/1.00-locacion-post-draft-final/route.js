@@ -1,120 +1,131 @@
-import Cors from "cors";
-import { google } from "googleapis";
+import { google } from 'googleapis';
+import { NextResponse } from 'next/server';
 
+// List of allowed origins
 const allowedOrigins = [
-  "https://www.inmoacuerdos.com",
-  "https://inmoacuerdos.webflow.io",
+  'https://www.inmoacuerdos.com',
+  'https://inmoacuerdos.webflow.io'
 ];
 
-const cors = Cors({
-  methods: ["POST", "OPTIONS"],
-  origin: allowedOrigins,
-  allowedHeaders: ["Content-Type"],
-});
+export async function OPTIONS(req) {
+  const origin = req.headers.get('origin');
+  const headers = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 
-export default async function handler(req, res) {
-  await new Promise((resolve, reject) => {
-    cors(req, res, (result) => {
-      if (result instanceof Error) {
-        console.error("CORS Error:", result);
-        return reject(result);
-      }
-      console.log("CORS Headers set:", res.getHeaders());
-      resolve();
-    });
+  return new NextResponse(null, {
+    status: 204,
+    headers: headers,
   });
+}
 
-  if (req.method === "OPTIONS") {
-    // Explicitly set CORS headers
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    return res.status(204).end();
-  }
+export async function POST(req) {
+  console.log("Starting API request to Google Sheets");
 
-  // Your Google Sheets Logic (Keep this)
-  if (req.method === "POST") {
-    try {
-      // Decode Google Service Account Credentials
-      const credentials = JSON.parse(
-        Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS, "base64").toString()
-      );
+  try {
+    const origin = req.headers.get('origin');
+    const headers = {
+      'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
 
-      // Authenticate with Google Sheets API
-      const auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    // Your Google Sheets logic here
+    const formData = await req.json();
+    const contractID = formData.contractID;
+
+    if (!contractID) {
+      return new NextResponse(JSON.stringify({ error: "Missing contractID" }), {
+        status: 400,
+        headers: headers,
       });
+    }
 
-      const sheets = google.sheets({ version: "v4", auth });
+    // Decode Google Service Account Credentials
+    const credentials = JSON.parse(
+      Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS, "base64").toString()
+    );
 
-      // Spreadsheet Details
-      const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
-      const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
+    // Authenticate with Google Sheets API
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
 
-      // Extract form data from request body
-      const { formData } = req.body;
-      const contractID = formData.contractID;
+    const sheets = google.sheets({ version: "v4", auth });
 
-      if (!contractID) {
-        return res.status(400).json({ error: "Missing contractID" });
-      }
+    // Spreadsheet Details
+    const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
+    const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
 
-      // Fetch all rows to check if contractID exists
-      const readResponse = await sheets.spreadsheets.values.get({
+    // Fetch all rows to check if contractID exists
+    const readResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!A:Z`,
+    });
+
+    const rows = readResponse.data.values || [];
+
+    // Get the header row to dynamically find the index of the contractID column
+    const headersRow = rows[0] || [];
+    const contractIDColumnIndex = headersRow.indexOf("contractID");
+
+    if (contractIDColumnIndex === -1) {
+      return new NextResponse(JSON.stringify({ error: "contractID column not found" }), {
+        status: 400,
+        headers: headers,
+      });
+    }
+
+    // Check if contractID already exists in any row
+    const existingRowIndex = rows.findIndex(
+      (row) => row[contractIDColumnIndex] === contractID
+    );
+
+    if (existingRowIndex === -1) {
+      // Contract ID doesn't exist, create a new row
+      const newRow = Object.values(formData);
+      await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: `${sheetName}!A:Z`,
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [newRow],
+        },
       });
 
-      const rows = readResponse.data.values || [];
+      return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
+        status: 200,
+        headers: headers,
+      });
+    } else {
+      // Contract ID exists, update the existing row
+      const updatedRow = Object.values(formData);
+      const updateRange = `${sheetName}!A${
+        existingRowIndex + 1
+      }:Z${existingRowIndex + 1}`;
 
-      // Get the header row to dynamically find the index of the contractID column
-      const headers = rows[0] || [];
-      const contractIDColumnIndex = headers.indexOf("contractID");
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: updateRange,
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [updatedRow],
+        },
+      });
 
-      if (contractIDColumnIndex === -1) {
-        return res.status(400).json({ error: "contractID column not found" });
-      }
-
-      // Check if contractID already exists in any row
-      const existingRowIndex = rows.findIndex(
-        (row) => row[contractIDColumnIndex] === contractID
-      );
-
-      if (existingRowIndex === -1) {
-        // Contract ID doesn't exist, create a new row
-        const newRow = Object.values(formData);
-        await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range: `${sheetName}!A:Z`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [newRow],
-          },
-        });
-
-        return res.status(200).json({ message: "New row added successfully." });
-      } else {
-        // Contract ID exists, update the existing row
-        const updatedRow = Object.values(formData);
-        const updateRange = `${sheetName}!A${
-          existingRowIndex + 1
-        }:Z${existingRowIndex + 1}`;
-
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: updateRange,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [updatedRow],
-          },
-        });
-
-        return res.status(200).json({ message: "Row updated successfully." });
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      return res.status(500).json({ error: "Internal Server Error" });
+      return new NextResponse(JSON.stringify({ message: "Row updated successfully." }), {
+        status: 200,
+        headers: headers,
+      });
     }
+  } catch (error) {
+    console.error("Error:", error);
+    return new NextResponse(JSON.stringify({ error: "Internal Server Error" }), {
+      status: 500,
+      headers: headers,
+    });
   }
 }
