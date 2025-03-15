@@ -14,7 +14,24 @@ const corsOptions = {
     } else {
       callback(new Error('Not allowed by CORS'));
     }
-  }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'], // Add OPTIONS to allowed methods
 };
 
 app.use(cors(corsOptions));
+
+// Example Route
+app.get('/api/data', (req, res) => {
+  res.json({ message: 'Hello from the API!' });
+});
+
+app.post('/api/data', (req, res) => {
+  res.json({ message: 'Post request recieved' });
+});
+
+//No explicit handling of options needed, as the cors middleware now handles it.
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
