@@ -3,7 +3,7 @@ import Cors from "cors";
 
 // Initialize CORS middleware
 const cors = Cors({
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   origin: [
     "https://www.inmoacuerdos.com",
     "https://inmoacuerdos.webflow.io",
@@ -21,6 +21,12 @@ export default async function handler(req, res) {
       resolve(result);
     })
   );
+
+  // Handle OPTIONS request
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
 
   // Handle POST request
   if (req.method === "POST") {
@@ -87,7 +93,7 @@ export default async function handler(req, res) {
       } else {
         // Contract ID exists, update the existing row
         const updatedRow = Object.values(formData);
-        const updateRange = `<span class="math-inline">\{sheetName\}\!A</span>{
+        const updateRange = `${sheetName}!A${
           existingRowIndex + 1
         }:Z${existingRowIndex + 1}`; // Update the row corresponding to contractID
 
