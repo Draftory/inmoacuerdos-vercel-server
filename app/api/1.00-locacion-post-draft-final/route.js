@@ -1,28 +1,34 @@
 import Cors from "cors";
 import { google } from "googleapis";
 
+const allowedOrigins = [
+  "https://www.inmoacuerdos.com",
+  "https://inmoacuerdos.webflow.io",
+];
+
 const cors = Cors({
   methods: ["POST", "OPTIONS"],
-  origin: [
-    "https://www.inmoacuerdos.com",
-    "https://inmoacuerdos.webflow.io",
-  ],
+  origin: allowedOrigins,
   allowedHeaders: ["Content-Type"],
 });
 
 export default async function handler(req, res) {
-  await new Promise((resolve, reject) => { // Wrap cors in a Promise
+  await new Promise((resolve, reject) => {
     cors(req, res, (result) => {
       if (result instanceof Error) {
         console.error("CORS Error:", result);
-        return reject(result); // Reject the Promise on error
+        return reject(result);
       }
       console.log("CORS Headers set:", res.getHeaders());
-      resolve(); // Resolve the Promise when cors is done
+      resolve();
     });
   });
 
   if (req.method === "OPTIONS") {
+    // Explicitly set CORS headers
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     return res.status(204).end();
   }
 
