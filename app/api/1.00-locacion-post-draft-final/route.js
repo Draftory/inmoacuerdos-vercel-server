@@ -1,3 +1,4 @@
+/*
 import { google } from "googleapis";
 import Cors from "cors";
 
@@ -116,4 +117,34 @@ export default async function handler(req, res) {
 
   // Handle unsupported methods
   return res.status(405).json({ error: "Method Not Allowed" });
+} */
+
+  import Cors from "cors";
+
+const cors = Cors({
+  methods: ["POST", "OPTIONS"],
+  origin: [
+    "https://www.inmoacuerdos.com",
+    "https://inmoacuerdos.webflow.io",
+  ],
+  allowedHeaders: ["Content-Type"],
+});
+
+export default async function handler(req, res) {
+  await new Promise((resolve, reject) =>
+    cors(req, res, (result) => {
+      if (result instanceof Error) {
+        return reject(result);
+      }
+      console.log("CORS Headers set:", res.getHeaders());
+      resolve(result);
+    })
+  );
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  res.status(200).json({ message: "Test response" });
 }
