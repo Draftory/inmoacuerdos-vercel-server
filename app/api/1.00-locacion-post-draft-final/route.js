@@ -23,15 +23,14 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
   console.log("Starting API request to Google Sheets");
+  const origin = req.headers.get('origin');
+  const headers = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 
   try {
-    const origin = req.headers.get('origin');
-    const headers = {
-      'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
-
     const formData = await req.json();
     console.log("Received form data (Server-Side):", formData);
     const contractID = formData.contractID;
@@ -45,22 +44,31 @@ export async function POST(req) {
       });
     }
 
-    // Decode Google Service Account Credentials
-    console.log("Decoding Google Service Account Credentials");
-    const credentials = JSON.parse(
-      Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS, "base64").toString()
-    );
-    console.log("Google Service Account Credentials decoded");
+    // Retrieve the Google service account credentials from environment variable
+    const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
-    // Authenticate with Google Sheets API
-    console.log("Authenticating with Google Sheets API");
+    if (!googleCredentialsBase64) {
+      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+    }
+
+    // Decode the Base64 string into JSON
+    const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
+
+    // Parse the JSON string to an object
+    const credentials = JSON.parse(googleCredentialsJson);
+
+    console.log("GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use");
+
+    // Authenticate with Google Sheets API using Service Account
     const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+      credentials, // Use the credentials directly from memory
+      scopes: 'https://www.googleapis.com/auth/spreadsheets', // Full access
     });
-    console.log("Google Sheets API authentication successful");
 
-    const sheets = google.sheets({ version: "v4", auth });
+    const client = await auth.getClient();
+    console.log("Authenticated with Google Sheets API");
+
+    const sheets = google.sheets({ version: 'v4', auth: client });
 
     // Spreadsheet Details
     console.log("Retrieving spreadsheet details");
