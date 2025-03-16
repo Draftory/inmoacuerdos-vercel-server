@@ -78,11 +78,15 @@ export async function POST(req) {
     console.log("Column Names:", columnNames);
     console.log("Form Object Keys:", Object.keys(formObject));
 
+    console.log("Form Object (JSON):", JSON.stringify(formObject));
+
     // 2. Create Mapped Data Array
     const mappedData = [];
     for (const columnName of columnNames) {
       console.log("Comparing Column Name:", columnName, "with Form Object Key:", columnName.trim());
-      mappedData.push(formObject[columnName.trim()] || "");
+      const value = formObject[columnName.trim()];
+      console.log("Value retrieved:", value);
+      mappedData.push(value || "");
     }
 
     console.log("Mapped data being sent to Google Sheets:", mappedData);
