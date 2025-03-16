@@ -33,16 +33,6 @@ export async function POST(req) {
   try {
     const formData = await req.json();
     console.log("Received form data (Server-Side):", formData);
-    const contractID = formData.contractID;
-    console.log("contractID (Server-Side):", contractID);
-
-    if (!contractID) {
-      console.log("Error: Missing contractID");
-      return new NextResponse(JSON.stringify({ error: "Missing contractID" }), {
-        status: 400,
-        headers: headers,
-      });
-    }
 
     // Retrieve the Google service account credentials from environment variable
     const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
@@ -77,74 +67,23 @@ export async function POST(req) {
     console.log("Spreadsheet ID:", spreadsheetId);
     console.log("Sheet Name:", sheetName);
 
-    // Fetch all rows to check if contractID exists
-    console.log("Fetching all rows from Google Sheets");
-    const readResponse = await sheets.spreadsheets.values.get({
+    // Append the new row to the spreadsheet
+    const newRow = Object.values(formData);
+    await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${sheetName}!A:Z`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [newRow],
+      },
     });
-    console.log("Google Sheets data retrieved");
+    console.log("New row added successfully");
 
-    const rows = readResponse.data.values || [];
+    return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
+      status: 200,
+      headers: headers,
+    });
 
-    // Get the header row to dynamically find the index of the contractID column
-    const headersRow = rows[0] || [];
-    const contractIDColumnIndex = headersRow.indexOf("contractID");
-
-    if (contractIDColumnIndex === -1) {
-      console.log("Error: contractID column not found");
-      return new NextResponse(JSON.stringify({ error: "contractID column not found" }), {
-        status: 400,
-        headers: headers,
-      });
-    }
-
-    // Check if contractID already exists in any row
-    const existingRowIndex = rows.findIndex(
-      (row) => row[contractIDColumnIndex] === contractID
-    );
-
-    if (existingRowIndex === -1) {
-      // Contract ID doesn't exist, create a new row
-      console.log("Contract ID not found, creating new row");
-      const newRow = Object.values(formData);
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${sheetName}!A:Z`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [newRow],
-        },
-      });
-      console.log("New row added successfully");
-
-      return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
-        status: 200,
-        headers: headers,
-      });
-    } else {
-      // Contract ID exists, update the existing row
-      console.log("Contract ID found, updating existing row");
-      const updatedRow = Object.values(formData);
-      const updateRange = `${sheetName}!A${
-        existingRowIndex + 1
-      }:Z${existingRowIndex + 1}`;
-
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: updateRange,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [updatedRow],
-        },
-      });
-      console.log("Row updated successfully");
-
-      return new NextResponse(JSON.stringify({ message: "Row updated successfully." }), {
-        status: 200,
-        headers: headers,
-      });
-    }
   } catch (error) {
     console.error("POST Error:", error);
     return new NextResponse(JSON.stringify({ error: error.message, stack: error.stack }), {
