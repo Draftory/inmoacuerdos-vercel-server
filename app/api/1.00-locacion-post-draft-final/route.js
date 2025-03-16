@@ -32,7 +32,7 @@ export async function POST(req) {
 
   try {
     const formData = await req.json();
-    console.log("Received form data (Server-Side):", formData); // Added log here
+    console.log("Received form data (Server-Side):", formData);
 
     // Retrieve the Google service account credentials from environment variable
     const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
@@ -67,30 +67,41 @@ export async function POST(req) {
     console.log("Spreadsheet ID:", spreadsheetId);
     console.log("Sheet Name:", sheetName);
 
-    // Append the new row to the spreadsheet
-    const newRow = Object.values(formData);
-    console.log("Data being sent to Google Sheets:", newRow); //added log here also
+    // Extract values directly into an array
+    const newRow = Object.keys(formData).map(key => formData[key] || ""); // Ensure no undefined values
+
+    console.log("Data being sent to Google Sheets:", newRow);
+
     await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: `${sheetName}!A:Z`,
+      spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
+      range: `${process.env.LOCACION_POST_DATABASE_SHEET_NAME}!A:Z`,
       valueInputOption: "RAW",
       requestBody: {
         values: [newRow],
       },
     });
+
     console.log("New row added successfully");
 
     return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
       status: 200,
-      headers: headers,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
     });
 
   } catch (error) {
     console.error("POST Error:", error);
-    console.log("Google Sheets Errors:", error.errors); //added log here
+    console.log("Google Sheets Errors:", error.errors);
     return new NextResponse(JSON.stringify({ error: error.message, stack: error.stack, googleSheetErrors: error.errors }), {
       status: 500,
-      headers: headers,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
     });
   }
 }
