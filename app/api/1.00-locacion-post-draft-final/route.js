@@ -31,8 +31,8 @@ export async function POST(req) {
   };
 
   try {
-    const formData = await req.json();
-    console.log("Received form data (Server-Side):", formData);
+    const formObject = await req.json(); // Receive formObject
+    console.log("Received form data (Server-Side):", formObject);
 
     // Retrieve the Google service account credentials from environment variable
     const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
@@ -67,17 +67,29 @@ export async function POST(req) {
     console.log("Spreadsheet ID:", spreadsheetId);
     console.log("Sheet Name:", sheetName);
 
-    // Extract values directly into an array
-    const newRow = Object.keys(formData).map(key => formData[key] || ""); // Ensure no undefined values
+    // 1. Fetch Column Names
+    const columnNamesResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!1:1`, // Get the first row (column names)
+    });
 
-    console.log("Data being sent to Google Sheets:", newRow);
+    const columnNames = columnNamesResponse.data.values[0]; // Array of column names
 
+    // 2. Create Mapped Data Array
+    const mappedData = [];
+    for (const columnName of columnNames) {
+      mappedData.push(formObject[columnName] || ""); // Use empty string if value is missing
+    }
+
+    console.log("Mapped data being sent to Google Sheets:", mappedData);
+
+    // 3. Send Mapped Data Array
     await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
-      range: `${process.env.LOCACION_POST_DATABASE_SHEET_NAME}!A:Z`,
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A:Z`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [newRow],
+        values: [mappedData],
       },
     });
 
