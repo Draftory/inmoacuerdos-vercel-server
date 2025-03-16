@@ -31,7 +31,7 @@ export async function POST(req) {
   };
 
   try {
-    const formObject = await req.json(); // Receive formObject
+    const formObject = await req.json();
     console.log("Received form data (Server-Side):", formObject);
 
     // Retrieve the Google service account credentials from environment variable
@@ -51,8 +51,8 @@ export async function POST(req) {
 
     // Authenticate with Google Sheets API using Service Account
     const auth = new google.auth.GoogleAuth({
-      credentials, // Use the credentials directly from memory
-      scopes: 'https://www.googleapis.com/auth/spreadsheets', // Full access
+      credentials,
+      scopes: 'https://www.googleapis.com/auth/spreadsheets',
     });
 
     const client = await auth.getClient();
@@ -70,15 +70,19 @@ export async function POST(req) {
     // 1. Fetch Column Names
     const columnNamesResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: spreadsheetId,
-      range: `${sheetName}!1:1`, // Get the first row (column names)
+      range: `${sheetName}!1:1`,
     });
 
-    const columnNames = columnNamesResponse.data.values[0]; // Array of column names
+    const columnNames = columnNamesResponse.data.values[0].map((name) => name.trim());
+
+    console.log("Column Names:", columnNames);
+    console.log("Form Object Keys:", Object.keys(formObject));
 
     // 2. Create Mapped Data Array
     const mappedData = [];
     for (const columnName of columnNames) {
-      mappedData.push(formObject[columnName] || ""); // Use empty string if value is missing
+      console.log("Comparing Column Name:", columnName, "with Form Object Key:", columnName.trim());
+      mappedData.push(formObject[columnName.trim()] || "");
     }
 
     console.log("Mapped data being sent to Google Sheets:", mappedData);
