@@ -32,7 +32,7 @@ export async function POST(req) {
 
   try {
     const formData = await req.json();
-    console.log("Received form data (Server-Side):", formData);
+    console.log("Received form data (Server-Side):", formData); // Added log here
 
     // Retrieve the Google service account credentials from environment variable
     const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
@@ -69,6 +69,7 @@ export async function POST(req) {
 
     // Append the new row to the spreadsheet
     const newRow = Object.values(formData);
+    console.log("Data being sent to Google Sheets:", newRow); //added log here also
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${sheetName}!A:Z`,
@@ -86,7 +87,8 @@ export async function POST(req) {
 
   } catch (error) {
     console.error("POST Error:", error);
-    return new NextResponse(JSON.stringify({ error: error.message, stack: error.stack }), {
+    console.log("Google Sheets Errors:", error.errors); //added log here
+    return new NextResponse(JSON.stringify({ error: error.message, stack: error.stack, googleSheetErrors: error.errors }), {
       status: 500,
       headers: headers,
     });
