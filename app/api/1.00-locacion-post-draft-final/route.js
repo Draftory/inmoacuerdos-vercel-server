@@ -1,104 +1,100 @@
-// Function to generate a unique contract ID
-function generateUniqueContractID() {
-  return 'CONTRACT-' + Math.random().toString(36).substr(2, 9);
+import { google } from 'googleapis';
+import { NextResponse } from 'next/server';
+
+// List of allowed origins
+const allowedOrigins = [
+  'https://www.inmoacuerdos.com',
+  'https://inmoacuerdos.webflow.io'
+];
+
+export async function OPTIONS(req) {
+  const origin = req.headers.get('origin');
+  const headers = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: headers,
+  });
 }
 
-// Function to initialize the contract ID on first interaction with the form
-function initializeUniqueContractID(event) {
-  const form = document.querySelector("#wf-form-1-00---Locacion-de-vivienda");
-  let contractIDInput = form.querySelector("input[name='contractID']");
-
-  if (!contractIDInput.value) {
-    contractIDInput.value = generateUniqueContractID();
-  }
-
-  // Remove the event listeners after the ID is generated
-  form.removeEventListener("focusin", initializeUniqueContractID);
-  form.removeEventListener("change", initializeUniqueContractID);
-}
-
-// Add event listeners to the form itself, to ensure it only runs once
-const form = document.querySelector("#wf-form-1-00---Locacion-de-vivienda");
-form.addEventListener("focusin", initializeUniqueContractID);
-form.addEventListener("change", initializeUniqueContractID);
-
-// Function to get current timestamp in Buenos Aires timezone
-function getBuenosAiresTimestamp() {
-  const now = new Date();
-  return now.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
-}
-
-// Function to handle saving as draft
-async function saveUniqueDraft(event) {
-  if (event) event.preventDefault();
-
-  const formData = new FormData(form);
-  const formObject = Object.fromEntries(formData);
-
-  // Ensure contract ID exists
-  if (!formObject.contractID) {
-    alert("No contract ID found. Please interact with the form to generate an ID.");
-    return;
-  }
-
-  // Add required fields
-  formObject.draftVersion = parseInt(formObject.draftVersion) || 1;
-  formObject.status = "Draft";
-  formObject.timestamp = getBuenosAiresTimestamp();
-
-  // Exclude file upload data
-  delete formObject.logoInmobiliaria;
-
-  console.log("Form Object (Client-Side):", formObject);
+export async function POST(req) {
+  console.log("Starting API request to Google Sheets");
+  const origin = req.headers.get('origin');
+  const headers = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 
   try {
-    const serverUrl = "https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-post-draft-final";
+    const { values } = await req.json(); // Extract 'values' directly
+    console.log("Received values (Server-Side):", values);
 
-    const response = await fetch(serverUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ formData: formObject }),
+    if (!values || !Array.isArray(values) || values.length === 0) {
+      throw new Error('Invalid or missing "values" in the request body.');
+    }
+
+    const newRow = values[0]; // Assuming the first element of 'values' is the row data.
+    console.log("Row to add:", newRow);
+
+    // Retrieve the Google service account credentials from environment variable
+    const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+
+    if (!googleCredentialsBase64) {
+      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+    }
+
+    // Decode the Base64 string into JSON
+    const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
+
+    // Parse the JSON string to an object
+    const credentials = JSON.parse(googleCredentialsJson);
+
+    console.log("GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use");
+
+    // Authenticate with Google Sheets API using Service Account
+    const auth = new google.auth.GoogleAuth({
+      credentials, // Use the credentials directly from memory
+      scopes: 'https://www.googleapis.com/auth/spreadsheets', // Full access
     });
 
-    if (response.ok) {
-      const result = await response.json();
+    const client = await auth.getClient();
+    console.log("Authenticated with Google Sheets API");
 
-      if (result.updated) {
-        alert("Draft updated successfully!");
-      } else {
-        alert("Draft saved successfully!");
-      }
+    const sheets = google.sheets({ version: 'v4', auth: client });
 
-      form.querySelector("input[name='draftVersion']").value = formObject.draftVersion + 1;
-    } else {
-      console.error("Error saving draft:", response.statusText);
-      alert("Error saving draft.");
-    }
+    // Spreadsheet Details
+    console.log("Retrieving spreadsheet details");
+    const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
+    const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
+    console.log("Spreadsheet ID:", spreadsheetId);
+    console.log("Sheet Name:", sheetName);
+
+    // Append the new row to the spreadsheet
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${sheetName}!A:Z`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [newRow],
+      },
+    });
+    console.log("New row added successfully");
+
+    return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
+      status: 200,
+      headers: headers,
+    });
+
   } catch (error) {
-    console.error("Error:", error);
-    alert("Error saving draft.");
+    console.error("POST Error:", error);
+    return new NextResponse(JSON.stringify({ error: error.message, stack: error.stack }), {
+      status: 500,
+      headers: headers,
+    });
   }
 }
-
-// Event listener for the save draft button
-document.querySelector('.save-as-draft-btn').addEventListener('click', saveUniqueDraft);
-
-// Handle form submission to set status to Final
-form.addEventListener("submit", function () {
-  document.querySelector("input[name='status']").value = "Final";
-});
-
-// Unsaved changes alert before leaving the page
-let isFormDirtyUnique = false;
-form.addEventListener("change", function () {
-  isFormDirtyUnique = true;
-});
-
-window.addEventListener("beforeunload", function (event) {
-  if (isFormDirtyUnique) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-});
