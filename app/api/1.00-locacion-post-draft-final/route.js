@@ -69,14 +69,25 @@ export async function POST(req) {
             range: `${sheetName}!1:1`,
         });
 
-        const headerRow = headerResponse.data.values[0];
+        const headerRow = headerResponse.data.values?.[0]; // Use optional chaining
         console.log("Header Row:", headerRow);
 
         if (!headerRow || headerRow.length === 0) {
             throw new Error('Header row not found in the spreadsheet.');
         }
 
-        const orderedValues = headerRow.map(header => formObject[header] || "");
+        const notFoundNames = [];
+        const orderedValues = headerRow.map(header => {
+            if (!(header in formObject)) {
+                notFoundNames.push(header);
+            }
+            return formObject[header] || "";
+        });
+
+        if (notFoundNames.length > 0) {
+            console.warn("The following names from the Google Sheet header were not found in the input:", notFoundNames);
+        }
+
         console.log("Ordered Values:", orderedValues);
 
         await sheets.spreadsheets.values.append({
