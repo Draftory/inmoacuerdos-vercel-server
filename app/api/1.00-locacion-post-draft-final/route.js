@@ -69,25 +69,27 @@ export async function POST(req) {
             range: `${sheetName}!1:1`,
         });
 
-        const headerRow = headerResponse.data.values?.[0]; // Use optional chaining
+        const headerRow = headerResponse.data?.values?.[0];
         console.log("Header Row:", headerRow);
 
         if (!headerRow || headerRow.length === 0) {
             throw new Error('Header row not found in the spreadsheet.');
         }
 
-        const notFoundNames = [];
-        const orderedValues = headerRow.map(header => {
-            if (!(header in formObject)) {
-                notFoundNames.push(header);
-            }
-            return formObject[header] || "";
-        });
+        const headerSet = new Set(headerRow);
+        const notFoundInSheet = [];
 
-        if (notFoundNames.length > 0) {
-            console.warn("The following names from the Google Sheet header were not found in the input:", notFoundNames);
+        for (const key in formObject) {
+            if (!headerSet.has(key)) {
+                notFoundInSheet.push(key);
+            }
         }
 
+        if (notFoundInSheet.length > 0) {
+            console.warn("The following input names were not found in the Google Sheet header:", notFoundInSheet);
+        }
+
+        const orderedValues = headerRow.map(header => formObject[header] || "");
         console.log("Ordered Values:", orderedValues);
 
         await sheets.spreadsheets.values.append({
