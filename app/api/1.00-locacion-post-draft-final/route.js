@@ -97,6 +97,10 @@ export async function POST(req) {
         console.log("Header Row:", headerRow);
         console.log("Form Object:", formObject);
 
+        // Add a log to display the column letter
+        const lastColumnLetter = getColumnLetter(orderedValues.length);
+        console.log(`Writing up to column: ${lastColumnLetter}`);
+
         // Retrieve all rows to search for contractID
         const allRowsResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
@@ -125,7 +129,7 @@ export async function POST(req) {
             // Update existing row
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
-                range: `${sheetName}!A${rowIndex}:${String.fromCharCode(64 + orderedValues.length)}${rowIndex}`,
+                range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
                 valueInputOption: "RAW",
                 requestBody: {
                     values: [orderedValues],
@@ -136,7 +140,7 @@ export async function POST(req) {
             // Append new row
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
-                range: `${sheetName}!A:${String.fromCharCode(64 + orderedValues.length)}`,
+                range: `${sheetName}!A:${lastColumnLetter}`,
                 valueInputOption: "RAW",
                 requestBody: {
                     values: [orderedValues],
@@ -157,4 +161,16 @@ export async function POST(req) {
             headers: headers,
         });
     }
+}
+
+// Function to convert column number to letter
+function getColumnLetter(columnNumber) {
+    let columnLetter = '';
+    let temp = columnNumber;
+    while (temp > 0) {
+        const remainder = (temp - 1) % 26;
+        columnLetter = String.fromCharCode(65 + remainder) + columnLetter;
+        temp = Math.floor((temp - 1) / 26);
+    }
+    return columnLetter;
 }
