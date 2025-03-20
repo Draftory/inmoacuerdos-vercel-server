@@ -1,4 +1,3 @@
-// Server Code (routeGetDraft.js)
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 
@@ -7,29 +6,34 @@ const allowedOrigins = [
     'https://inmoacuerdos.webflow.io'
 ];
 
-export async function OPTIONS(req) {
-    const origin = req.headers.get('origin');
-    const headers = {
-        'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
-
-    return new NextResponse(null, {
-        status: 204,
-        headers: headers,
-    });
-}
-
 export async function GET(req) {
-    const origin = req.headers.get('origin');
-    const headers = {
-        'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
+    console.log("Starting API request to Google Sheets for draft data");
 
     try {
+        const origin = req.headers.get('origin');
+
+        const headers = {
+            'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+            'Access-Control-Allow-Methods': 'GET',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        };
+
+        const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+        if (!googleCredentialsBase64) {
+            throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+        }
+        const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
+        const credentials = JSON.parse(googleCredentialsJson);
+
+        console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and ready for use");
+
+        const auth = new google.auth.GoogleAuth({
+            credentials,
+            scopes: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+        });
+        const client = await auth.getClient();
+        const sheets = google.sheets({ version: 'v4', auth: client });
+
         const { searchParams } = new URL(req.url);
         const contractID = searchParams.get('contractID');
 
@@ -40,26 +44,9 @@ export async function GET(req) {
             });
         }
 
-        const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-        if (!googleCredentialsBase64) {
-            throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
-        }
-        const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
-        const credentials = JSON.parse(googleCredentialsJson);
-
-        const auth = new google.auth.GoogleAuth({
-            credentials,
-            scopes: 'https://www.googleapis.com/auth/spreadsheets',
-        });
-        const client = await auth.getClient();
-        const sheets = google.sheets({ version: 'v4', auth: client });
-
-        const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
-        const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-
         const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: sheetName,
+            spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
+            range: process.env.LOCACION_POST_DATABASE_SHEET_NAME,
         });
 
         const values = response.data.values;
@@ -86,10 +73,7 @@ export async function GET(req) {
                 for (let j = 0; j < headersRow.length; j++) {
                     draftData[headersRow[j]] = values[i][j];
                 }
-                return new NextResponse(JSON.stringify(draftData), {
-                    status: 200,
-                    headers: headers,
-                });
+                return NextResponse.json(draftData, { headers });
             }
         }
 
@@ -98,10 +82,7 @@ export async function GET(req) {
             headers: headers,
         });
     } catch (error) {
-        console.error('GET Error:', error);
-        return new NextResponse(JSON.stringify({ error: error.message, stack: error.stack }), {
-            status: 500,
-            headers: headers,
-        });
+        console.error("Error fetching draft data from Google Sheets:", error);
+        return NextResponse.error({ status: 500, headers });
     }
 }
