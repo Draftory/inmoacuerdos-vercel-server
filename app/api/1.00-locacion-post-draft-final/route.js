@@ -141,6 +141,22 @@ export async function POST(req) {
             });
             console.log("Row updated successfully");
         } else {
+            // Check if a row with the contractID exists
+            let contractIDExists = false;
+            for (let i = 1; i < allRows.length; i++) {
+                if (allRows[i][contractIDColumnIndex] === formObject.contractID) {
+                    contractIDExists = true;
+                    break;
+                }
+            }
+
+            if (contractIDExists) {
+                return new NextResponse(JSON.stringify({ error: "ContractID already exists." }), {
+                    status: 409, // Conflict status code
+                    headers: headers,
+                });
+            }
+
             // Append new row
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
