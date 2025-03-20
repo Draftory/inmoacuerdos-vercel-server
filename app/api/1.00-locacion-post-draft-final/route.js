@@ -101,7 +101,7 @@ export async function POST(req) {
         const lastColumnLetter = getColumnLetter(orderedValues.length);
         console.log(`Writing up to column: ${lastColumnLetter}`);
 
-        // Retrieve all rows to search for contractID and MemberstackID
+        // Retrieve all rows to search for contractID
         const allRowsResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: `${sheetName}!A:VM`,
@@ -141,17 +141,17 @@ export async function POST(req) {
             });
             console.log("Row updated successfully");
         } else {
-            // Check if a row with the contractID exists without matching MemberstackID
+            // Check if a row with the contractID exists
             let contractIDExists = false;
             for (let i = 1; i < allRows.length; i++) {
-                if (allRows[i][contractIDColumnIndex] === formObject.contractID && allRows[i][memberstackIDColumnIndex] !== formObject.MemberstackID) {
+                if (allRows[i][contractIDColumnIndex] === formObject.contractID) {
                     contractIDExists = true;
                     break;
                 }
             }
 
             if (contractIDExists) {
-                return new NextResponse(JSON.stringify({ error: "ContractID already exists for a different user." }), {
+                return new NextResponse(JSON.stringify({ error: "ContractID already exists." }), {
                     status: 409, // Conflict status code
                     headers: headers,
                 });
