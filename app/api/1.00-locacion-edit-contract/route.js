@@ -22,15 +22,23 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
     console.log("Starting API request to Google Sheets for draft data");
+    const origin = req.headers.get('origin');
+    const headers = {
+        'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
 
     try {
-        const origin = req.headers.get('origin');
+        const requestBody = await req.json();
+        const contractID = requestBody.contractID;
 
-        const headers = {
-            'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        };
+        if (!contractID) {
+            return new NextResponse(JSON.stringify({ error: 'contractID is required' }), {
+                status: 400,
+                headers: headers,
+            });
+        }
 
         const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
         if (!googleCredentialsBase64) {
@@ -39,7 +47,7 @@ export async function POST(req) {
         const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
         const credentials = JSON.parse(googleCredentialsJson);
 
-        console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and ready for use");
+        console.log("GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use");
 
         const auth = new google.auth.GoogleAuth({
             credentials,
@@ -47,16 +55,6 @@ export async function POST(req) {
         });
         const client = await auth.getClient();
         const sheets = google.sheets({ version: 'v4', auth: client });
-
-        const requestBody = await req.json(); // Get the JSON body
-        const contractID = requestBody.contractID; // Extract contractID
-
-        if (!contractID) {
-            return new NextResponse(JSON.stringify({ error: 'contractID is required' }), {
-                status: 400,
-                headers: headers,
-            });
-        }
 
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
@@ -96,7 +94,7 @@ export async function POST(req) {
             headers: headers,
         });
     } catch (error) {
-        console.error("Error fetching draft data from Google Sheets:", error);
+        console.error("POST Error:", error);
         return NextResponse.error({ status: 500, headers });
     }
 }
