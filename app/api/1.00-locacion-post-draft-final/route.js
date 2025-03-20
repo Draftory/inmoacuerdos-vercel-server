@@ -109,17 +109,21 @@ export async function POST(req) {
 
         const allRows = allRowsResponse.data?.values || [];
 
-        // Find the index of the contractID column
+        // Find the index of the contractID and MemberstackID columns
         const contractIDColumnIndex = headerRow.indexOf('contractID');
+        const memberstackIDColumnIndex = headerRow.indexOf('MemberstackID');
 
         if (contractIDColumnIndex === -1) {
             throw new Error('contractID column not found in the header.');
         }
+        if (memberstackIDColumnIndex === -1) {
+            throw new Error('MemberstackID column not found in the header.');
+        }
 
-        // Search for the row with the matching contractID
+        // Search for the row with the matching contractID and MemberstackID
         let rowIndex = -1;
         for (let i = 1; i < allRows.length; i++) { // Start from 1 to skip header
-            if (allRows[i][contractIDColumnIndex] === formObject.contractID) {
+            if (allRows[i][contractIDColumnIndex] === formObject.contractID && allRows[i][memberstackIDColumnIndex] === formObject.MemberstackID) {
                 rowIndex = i + 1; // +1 to account for header row and 1-based indexing
                 break;
             }
