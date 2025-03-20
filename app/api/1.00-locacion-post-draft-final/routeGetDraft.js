@@ -6,7 +6,21 @@ const allowedOrigins = [
     'https://inmoacuerdos.webflow.io'
 ];
 
-export async function GET(req) {
+export async function OPTIONS(req) {
+    const origin = req.headers.get('origin');
+    const headers = {
+        'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    return new NextResponse(null, {
+        status: 204,
+        headers: headers,
+    });
+}
+
+export async function POST(req) {
     console.log("Starting API request to Google Sheets for draft data");
 
     try {
@@ -14,7 +28,7 @@ export async function GET(req) {
 
         const headers = {
             'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
-            'Access-Control-Allow-Methods': 'GET',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         };
 
@@ -34,8 +48,8 @@ export async function GET(req) {
         const client = await auth.getClient();
         const sheets = google.sheets({ version: 'v4', auth: client });
 
-        const { searchParams } = new URL(req.url);
-        const contractID = searchParams.get('contractID');
+        const requestBody = await req.json(); // Get the JSON body
+        const contractID = requestBody.contractID; // Extract contractID
 
         if (!contractID) {
             return new NextResponse(JSON.stringify({ error: 'contractID is required' }), {
