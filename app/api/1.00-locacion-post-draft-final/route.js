@@ -88,52 +88,44 @@ export async function POST(req) {
             console.warn("The following input names were not found in the Google Sheet header:", notFoundInSheet);
         }
 
-        // Filter formObject to only include fields present in headerRow
-        const filteredFormObject = {};
-        headerRow.forEach(header => {
-            if (formObject.hasOwnProperty(header)) {
-                filteredFormObject[header] = formObject[header];
-            }
-        });
-
-        const orderedValues = headerRow.map(header => filteredFormObject[header] || "");
+        const orderedValues = headerRow.map(header => formObject[header] || "");
         console.log("Ordered Values:", orderedValues);
 
-        // Find existing row
-        const response = await sheets.spreadsheets.values.get({
+        // Retrieve all rows to search for contractID
+        const allRowsResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: sheetName,
+            range: `${sheetName}!A:Z`,
         });
 
-        const values = response.data.values;
-        let rowIndex = -1;
+        const allRows = allRowsResponse.data?.values || [];
 
-        if (values && values.length > 1) {
-            const contractIDIndex = headerRow.indexOf('contractID');
-            for (let i = 1; i < values.length; i++) {
-                if (values[i][contractIDIndex] === formObject.contractID) {
-                    rowIndex = i + 1; // +1 to account for header row
-                    break;
-                }
+        // Find the index of the contractID column
+        const contractIDColumnIndex = headerRow.indexOf('contractID');
+
+        if (contractIDColumnIndex === -1) {
+            throw new Error('contractID column not found in the header.');
+        }
+
+        // Search for the row with the matching contractID
+        let rowIndex = -1;
+        for (let i = 1; i < allRows.length; i++) { // Start from 1 to skip header
+            if (allRows[i][contractIDColumnIndex] === formObject.contractID) {
+                rowIndex = i + 1; // +1 to account for header row and 1-based indexing
+                break;
             }
         }
 
-        if (rowIndex > 0) {
+        if (rowIndex !== -1) {
             // Update existing row
-            const lastColumnLetter = String.fromCharCode(64 + headerRow.length); // Calculate last column letter
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
-                range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`, // Use calculated range
+                range: `${sheetName}!A${rowIndex}:Z${rowIndex}`,
                 valueInputOption: "RAW",
                 requestBody: {
                     values: [orderedValues],
                 },
             });
             console.log("Row updated successfully");
-            return new NextResponse(JSON.stringify({ message: "Row updated successfully.", updated: true }), {
-                status: 200,
-                headers: headers,
-            });
         } else {
             // Append new row
             await sheets.spreadsheets.values.append({
@@ -145,12 +137,12 @@ export async function POST(req) {
                 },
             });
             console.log("New row added successfully");
-
-            return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
-                status: 200,
-                headers: headers,
-            });
         }
+
+        return new NextResponse(JSON.stringify({ message: rowIndex !== -1 ? "Row updated successfully." : "New row added successfully." }), {
+            status: 200,
+            headers: headers,
+        });
 
     } catch (error) {
         console.error("POST Error:", error);
