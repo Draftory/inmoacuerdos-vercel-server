@@ -32,9 +32,10 @@ export async function POST(req) {
     try {
         const requestBody = await req.json();
         const contractID = requestBody.contractID;
+        const memberstackID = requestBody.memberstackID; // Get MemberstackID from request
 
-        if (!contractID) {
-            return new NextResponse(JSON.stringify({ error: 'contractID is required' }), {
+        if (!contractID || !memberstackID) {
+            return new NextResponse(JSON.stringify({ error: 'contractID and memberstackID are required' }), {
                 status: 400,
                 headers: headers,
             });
@@ -71,6 +72,7 @@ export async function POST(req) {
 
         const headersRow = values[0];
         const contractIDIndex = headersRow.indexOf('contractID');
+        const memberstackIDIndex = headersRow.indexOf('MemberstackID'); // Get MemberstackID column index
 
         if (contractIDIndex === -1) {
             return new NextResponse(JSON.stringify({ error: 'contractID column not found' }), {
@@ -78,9 +80,15 @@ export async function POST(req) {
                 headers: headers,
             });
         }
+        if (memberstackIDIndex === -1){
+            return new NextResponse(JSON.stringify({error: 'MemberstackID column not found'}),{
+                status: 400,
+                headers: headers,
+            });
+        }
 
         for (let i = 1; i < values.length; i++) {
-            if (values[i][contractIDIndex] === contractID) {
+            if (values[i][contractIDIndex] === contractID && values[i][memberstackIDIndex] === memberstackID) {
                 const draftData = {};
                 for (let j = 0; j < headersRow.length; j++) {
                     draftData[headersRow[j]] = values[i][j];
@@ -89,7 +97,7 @@ export async function POST(req) {
             }
         }
 
-        return new NextResponse(JSON.stringify({ error: 'Draft not found' }), {
+        return new NextResponse(JSON.stringify({ error: 'Draft not found or unauthorized' }), {
             status: 404,
             headers: headers,
         });
