@@ -1,4 +1,3 @@
-// Server Code (route.js)
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 
@@ -92,20 +91,57 @@ export async function POST(req) {
         const orderedValues = headerRow.map(header => formObject[header] || "");
         console.log("Ordered Values:", orderedValues);
 
-        await sheets.spreadsheets.values.append({
+        // Find existing row
+        const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `${sheetName}!A:Z`,
-            valueInputOption: "RAW",
-            requestBody: {
-                values: [orderedValues],
-            },
+            range: sheetName,
         });
-        console.log("New row added successfully");
 
-        return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
-            status: 200,
-            headers: headers,
-        });
+        const values = response.data.values;
+        let rowIndex = -1;
+
+        if (values && values.length > 1) {
+            const contractIDIndex = headerRow.indexOf('contractID');
+            for (let i = 1; i < values.length; i++) {
+                if (values[i][contractIDIndex] === formObject.contractID) {
+                    rowIndex = i + 1; // +1 to account for header row
+                    break;
+                }
+            }
+        }
+
+        if (rowIndex > 0) {
+            // Update existing row
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: `${sheetName}!A${rowIndex}:Z${rowIndex}`,
+                valueInputOption: "RAW",
+                requestBody: {
+                    values: [orderedValues],
+                },
+            });
+            console.log("Row updated successfully");
+            return new NextResponse(JSON.stringify({ message: "Row updated successfully.", updated: true }), {
+                status: 200,
+                headers: headers,
+            });
+        } else {
+            // Append new row
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: `${sheetName}!A:Z`,
+                valueInputOption: "RAW",
+                requestBody: {
+                    values: [orderedValues],
+                },
+            });
+            console.log("New row added successfully");
+
+            return new NextResponse(JSON.stringify({ message: "New row added successfully." }), {
+                status: 200,
+                headers: headers,
+            });
+        }
 
     } catch (error) {
         console.error("POST Error:", error);
