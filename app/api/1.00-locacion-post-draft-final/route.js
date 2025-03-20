@@ -91,10 +91,16 @@ export async function POST(req) {
         const orderedValues = headerRow.map(header => formObject[header] || "");
         console.log("Ordered Values:", orderedValues);
 
+        // Debugging logs
+        console.log("Header Row Length:", headerRow.length);
+        console.log("Ordered Values Length:", orderedValues.length);
+        console.log("Header Row:", headerRow);
+        console.log("Form Object:", formObject);
+
         // Retrieve all rows to search for contractID
         const allRowsResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `${sheetName}!A:Z`,
+            range: `${sheetName}!A:VM`,
         });
 
         const allRows = allRowsResponse.data?.values || [];
@@ -119,7 +125,7 @@ export async function POST(req) {
             // Update existing row
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
-                range: `${sheetName}!A${rowIndex}:Z${rowIndex}`,
+                range: `${sheetName}!A${rowIndex}:${String.fromCharCode(64 + orderedValues.length)}${rowIndex}`,
                 valueInputOption: "RAW",
                 requestBody: {
                     values: [orderedValues],
@@ -130,7 +136,7 @@ export async function POST(req) {
             // Append new row
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
-                range: `${sheetName}!A:Z`,
+                range: `${sheetName}!A:${String.fromCharCode(64 + orderedValues.length)}`,
                 valueInputOption: "RAW",
                 requestBody: {
                     values: [orderedValues],
