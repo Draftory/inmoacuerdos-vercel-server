@@ -40,21 +40,23 @@ export async function POST(request) {
     const preference = new Preference(client);
 
     const preferenceResult = await preference.create({
-      items: [
-        {
-          title: req.title,
-          quantity: Number(req.quantity),
-          unit_price: Number(req.price),
-          currency_id: 'ARS',
+      body: {
+        items: [
+          {
+            title: req.title,
+            quantity: Number(req.quantity),
+            unit_price: Number(req.price),
+            currency_id: 'ARS',
+          },
+        ],
+        back_urls: {
+          success: 'https://www.inmoacuerdos.com/pago-exitoso',
+          failure: 'https://www.inmoacuerdos.com/pago-fallido',
+          pending: 'https://www.inmoacuerdos.com/pago-pendiente',
         },
-      ],
-      back_urls: {
-        success: 'https://www.inmoacuerdos.com/pago-exitoso',
-        failure: 'https://www.inmoacuerdos.com/pago-fallido',
-        pending: 'https://www.inmoacuerdos.com/pago-pendiente',
+        auto_return: 'approved',
+        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/1.00-locacion-vivienda-mercadopago-one-time-payment/webhook-mercado-pago',
       },
-      auto_return: 'approved',
-      notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/1.00-locacion-vivienda-mercadopago-one-time-payment/webhook-mercado-pago', // Ajusta la ruta si es necesario
     });
 
     return new NextResponse(JSON.stringify({ init_point: preferenceResult.init_point }), {
