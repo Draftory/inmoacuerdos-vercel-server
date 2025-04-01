@@ -10,20 +10,27 @@ const allowedOrigins = [
 export async function GET(req) {
   console.log("Starting API request to Airtable");
 
+  // Initialize headers with a default value
+  let headers = {
+    'Access-Control-Allow-Origin': allowedOrigins[0], // Default to the first allowed origin
+    'Access-Control-Allow-Methods': 'GET',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+
   try {
     // Retrieve the request origin
     const origin = req.headers.get('origin');
 
     // Define CORS headers dynamically based on the request origin
-    const headers = {
-      'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0], // Use the first allowed origin as fallback
+    headers = {
+      'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
       'Access-Control-Allow-Methods': 'GET',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
     // Retrieve the Airtable Personal Access Token and base ID from environment variables
     const airtablePersonalAccessToken = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
-    const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+    const airtableBaseId = process.env.AIRTABLE_BASE_ID_CLAUSES; // Using the environment variable you set
     const airtableTableName = process.env.AIRTABLE_TABLE_NAME || 'Clausulas-locacion-vivienda'; // Default table name
 
     if (!airtablePersonalAccessToken) {
@@ -31,7 +38,7 @@ export async function GET(req) {
     }
 
     if (!airtableBaseId) {
-      throw new Error('AIRTABLE_BASE_ID is not set');
+      throw new Error('AIRTABLE_BASE_ID_CLAUSES is not set');
     }
 
     console.log("Airtable Personal Access Token and base ID retrieved from environment variables");
