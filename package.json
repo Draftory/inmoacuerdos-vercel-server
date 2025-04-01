@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "airtable": "^0.12.2",
     "cors": "^2.8.5",
     "google-auth-library": "^9.15.1",
     "googleapis": "^146.0.0",

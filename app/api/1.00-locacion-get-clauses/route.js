@@ -1,5 +1,5 @@
-import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
+import Airtable from 'airtable';
 
 // List of allowed origins
 const allowedOrigins = [
@@ -8,7 +8,7 @@ const allowedOrigins = [
 ];
 
 export async function GET(req) {
-  console.log("Starting API request to Google Sheets");
+  console.log("Starting API request to Airtable");
 
   try {
     // Retrieve the request origin
@@ -21,44 +21,71 @@ export async function GET(req) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
-    // Retrieve the Google service account credentials from environment variable
-    const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+    // Retrieve the Airtable Personal Access Token and base ID from environment variables
+    const airtablePersonalAccessToken = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
+    const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+    const airtableTableName = process.env.AIRTABLE_TABLE_NAME || 'Clausulas-locacion-vivienda'; // Default table name
 
-    if (!googleCredentialsBase64) {
-      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+    if (!airtablePersonalAccessToken) {
+      throw new Error('AIRTABLE_PERSONAL_ACCESS_TOKEN is not set');
     }
 
-    // Decode the Base64 string into JSON
-    const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
+    if (!airtableBaseId) {
+      throw new Error('AIRTABLE_BASE_ID is not set');
+    }
 
-    // Parse the JSON string to an object
-    const credentials = JSON.parse(googleCredentialsJson);
+    console.log("Airtable Personal Access Token and base ID retrieved from environment variables");
 
-    console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and ready for use");
+    // Initialize Airtable client with Personal Access Token
+    const base = new Airtable({ apiKey: airtablePersonalAccessToken }).base(airtableBaseId);
 
-    // Authenticate with Google Sheets API using Service Account
-    const auth = new google.auth.GoogleAuth({
-      credentials, // Use the credentials directly from memory
-      scopes: 'https://www.googleapis.com/auth/spreadsheets.readonly',
-    });
+    console.log("Airtable client initialized");
 
-    const client = await auth.getClient();
-    console.log("Authenticated with Google Sheets API");
+    // Array to store retrieved records
+    const records = [];
 
-    const sheets = google.sheets({ version: 'v4', auth: client });
+    // Fetch data from the specified Airtable table
+    await base(airtableTableName)
+      .select({
+        // You can add filters, sorting, and other options here if needed
+        // Example:
+        // filterByFormula: "{Status} = 'Approved'",
+        // sort: [{field: 'Created At', direction: 'desc'}]
+      })
+      .eachPage(
+        function page(partialRecords, fetchNextPage) {
+          console.log('Retrieved a page of records', partialRecords);
+          records.push(...partialRecords);
+          fetchNextPage();
+        },
+        function done(err) {
+          if (err) {
+            console.error('Error fetching records from Airtable:', err);
+            // Return an error response with the CORS headers
+            return NextResponse.error({ status: 500, headers });
+          }
+          console.log('Successfully fetched all records from Airtable');
 
-    // Attempt to fetch data from the specified Google Sheet
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.locacion_get_clauses_SHEET_ID,
-      range: 'Clausulas-locacion-vivienda', // Adjust the range if needed
-    });
+          // Format the Airtable records into a structure similar to Google Sheets values
+          const values = records.map(record => Object.values(record.fields));
 
-    console.log("Fetched Google Sheets data:", response.data);
+          const airtableResponse = {
+            values: values, // Array of rows, where each row is an array of cell values
+            // You might want to include other metadata if needed
+          };
 
-    // Return the response with the appropriate CORS headers
-    return NextResponse.json(response.data, { headers });
+          console.log("Formatted Airtable data:", airtableResponse);
+
+          // Return the Airtable data with the appropriate CORS headers
+          return NextResponse.json(airtableResponse, { headers });
+        }
+      );
+
+    // Note: The NextResponse will be sent within the `done` callback of `eachPage`
+    // to ensure all records are fetched.
+
   } catch (error) {
-    console.error("Error fetching data from Google Sheets:", error);
+    console.error("Error processing Airtable request:", error);
 
     // Return a generic error response with the CORS headers
     return NextResponse.error({ status: 500, headers });
