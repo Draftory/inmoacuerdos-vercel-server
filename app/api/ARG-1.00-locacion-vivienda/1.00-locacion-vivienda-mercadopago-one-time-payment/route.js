@@ -55,7 +55,7 @@ export async function POST(request) {
           pending: 'https://www.inmoacuerdos.com/pago-pendiente',
         },
         auto_return: 'approved',
-        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/webhook-mercado-pago',
+        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/1.00-locacion-vivienda-mercadopago-one-time-payment/webhook-mercado-pago',
       },
     });
 
