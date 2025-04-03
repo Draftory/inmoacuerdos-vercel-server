@@ -1,4 +1,4 @@
-// app/api/create-preference-pro/route.js
+// app/api/create-preference-wallet-pro/route.js
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { NextResponse } from 'next/server';
 
@@ -41,13 +41,22 @@ export async function POST(request) {
 
     const preferenceResult = await preference.create({
       body: {
+        payment_methods: {
+          excluded_payment_methods: [],
+          excluded_payment_types: [
+            {
+              id: "ticket"
+            }
+          ],
+          installments: 1
+        },
         items: [
           {
             title: req.title,
             quantity: Number(req.quantity),
             unit_price: Number(req.price),
             currency_id: 'ARS',
-          },
+          }
         ],
         back_urls: {
           success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de éxito
@@ -56,11 +65,10 @@ export async function POST(request) {
         },
         auto_return: 'approved',
         notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-Mercadopago/webhook-mercado-pago', // Reemplaza con tu URL de webhook
-        // Puedes agregar más configuraciones de preferencia aquí según tus necesidades
-      },
+      }
     });
 
-    return NextResponse.json({ init_point: preferenceResult.init_point });
+    return NextResponse.json({ preferenceId: preferenceResult.id });
   } catch (error) {
     console.error('Error al crear la preferencia:', error);
     return new NextResponse(JSON.stringify({ error: 'Error al crear la preferencia de pago' }), {
