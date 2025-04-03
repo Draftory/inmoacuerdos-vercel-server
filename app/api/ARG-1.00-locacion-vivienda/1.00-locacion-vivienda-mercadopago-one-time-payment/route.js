@@ -1,4 +1,4 @@
-// app/api/create-preference/route.js
+// app/api/create-preference-bricks/route.js
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { NextResponse } from 'next/server';
 
@@ -35,7 +35,6 @@ export async function POST(request) {
   }
 
   try {
-    const req = await request.json();
     const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
     const preference = new Preference(client);
 
@@ -43,26 +42,28 @@ export async function POST(request) {
       body: {
         items: [
           {
-            title: req.items[0].title,
-            quantity: Number(req.items[0].quantity),
-            unit_price: Number(req.items[0].unit_price),
+            title: 'Descripción de tu producto/servicio', // Reemplaza con la descripción real
+            quantity: 1, // Reemplaza con la cantidad
+            unit_price: 100.00, // Reemplaza con el precio
             currency_id: 'ARS',
           },
         ],
-        purpose: 'wallet_purchase',
-        // Puedes incluir más configuraciones de preferencia si es necesario
+        back_urls: {
+          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tus URLs
+          failure: 'https://www.inmoacuerdos.com/pago-fallido',
+          pending: 'https://www.inmoacuerdos.com/pago-pendiente',
+        },
+        auto_return: 'approved',
+        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/webhook-mercado-pago', // Reemplaza con tu URL de webhook
       },
     });
 
-    return new NextResponse(JSON.stringify({ preference_id: preferenceResult.id }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin || '*' },
-    });
+    return NextResponse.json({ preferenceId: preferenceResult.id });
   } catch (error) {
     console.error('Error al crear la preferencia:', error);
-    return new NextResponse(JSON.stringify({ error: 'Error al crear la preferencia de pago' }), {
+    return new NextResponse(JSON.stringify({ error: 'Error al crear la preferencia' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin || '*' },
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }
