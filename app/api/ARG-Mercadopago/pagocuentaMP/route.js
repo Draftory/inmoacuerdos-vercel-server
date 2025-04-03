@@ -74,4 +74,4 @@ return new NextResponse(JSON.stringify({ error: 'Error al crear la preferencia d
 status: 500,
 headers: { 'Content-Type': 'application/json' },
 });
-}
+}}
