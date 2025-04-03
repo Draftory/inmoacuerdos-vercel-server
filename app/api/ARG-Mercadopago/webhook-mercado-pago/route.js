@@ -1,56 +1,29 @@
-// app/api/process-payment/route.js
-import { MercadoPagoConfig, Payment } from 'mercadopago';
+// app/api/ARG-1.00-locacion-vivienda/1.00-locacion-vivienda-mercadopago-one-time-payment/webhook-mercado-pago/route.js
 import { NextResponse } from 'next/server';
 
-const allowedOrigins = [
-  'https://www.inmoacuerdos.com',
-  'https://inmoacuerdos.webflow.io',
-];
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    console.log('Webhook recibido:', body);
 
-export async function OPTIONS(request) {
-  const origin = request.headers.get('origin');
+    // Aquí va tu lógica para verificar la firma,
+    // consultar los detalles del pago y actualizar Google Sheets.
 
-  if (allowedOrigins.includes(origin)) {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': origin || '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
+    return new NextResponse('OK', { status: 200 });
+  } catch (error) {
+    console.error('Error al procesar el webhook:', error);
+    return new NextResponse('Error', { status: 500 });
   }
-
-  return new NextResponse(null, { status: 405, body: 'Method Not Allowed' });
 }
 
-export async function POST(request) {
-  const origin = request.headers.get('origin');
-
-  if (!allowedOrigins.includes(origin)) {
-    return new NextResponse(JSON.stringify({ error: 'Not allowed origin' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  try {
-    const reqBody = await request.json();
-    const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
-    const payment = new Payment(client);
-
-    const paymentResult = await payment.create({
-      body: reqBody,
-    });
-
-    console.log('Resultado del pago:', paymentResult);
-
-    return NextResponse.json(paymentResult.toJSON());
-  } catch (error) {
-    console.error('Error al crear el pago:', error);
-    return new NextResponse(JSON.stringify({ error: 'Error al procesar el pago' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+// Opcionalmente, si quieres manejar solicitudes OPTIONS para CORS preflight
+export async function OPTIONS(request) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*', // Ajusta según tus necesidades de seguridad
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
