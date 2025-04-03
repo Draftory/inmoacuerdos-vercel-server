@@ -1,29 +1,49 @@
-// app/api/ARG-1.00-locacion-vivienda/1.00-locacion-vivienda-mercadopago-one-time-payment/webhook-mercado-pago/route.js
+// app/api/ARG-Mercadopago/webhook-mercado-pago/route.js
 import { NextResponse } from 'next/server';
+import mercadopago from 'mercadopago';
 
-export async function POST(request) {
-  try {
-    const body = await request.json();
-    console.log('Webhook recibido:', body);
+// Configura tu access token usando la nueva variable de entorno
+mercadopago.configure({
+    access_token: process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN,
+});
 
-    // Aquí va tu lógica para verificar la firma,
-    // consultar los detalles del pago y actualizar Google Sheets.
+export async function POST(req) {
+    try {
+        const payment = req.body;
 
-    return new NextResponse('OK', { status: 200 });
-  } catch (error) {
-    console.error('Error al procesar el webhook:', error);
-    return new NextResponse('Error', { status: 500 });
-  }
+        if (payment.type === 'payment' && payment.action === 'payment.created') {
+            const paymentId = payment.data.id;
+
+            // Obtiene los detalles del pago
+            const paymentDetails = await mercadopago.payments.get(paymentId);
+
+            if (paymentDetails.response && paymentDetails.response.external_reference) {
+                const contractID = paymentDetails.response.external_reference;
+                const paymentStatus = paymentDetails.response.status;
+
+                // Verifica el estado del pago
+                if (paymentStatus === 'approved') {
+                    // Actualiza tu base de datos
+                    await actualizarPagoEnBaseDeDatos(contractID, paymentId, paymentStatus);
+
+                    console.log(`Pago ${paymentId} (${paymentStatus}) recibido para contrato ${contractID}`);
+                } else {
+                    console.log(`Pago ${paymentId} (${paymentStatus}) no aprobado.`);
+                }
+            } else {
+                console.error('No se encontró external_reference en el pago');
+            }
+        }
+
+        return new NextResponse('OK', { status: 200 });
+    } catch (error) {
+        console.error('Error al procesar el webhook:', error);
+        return new NextResponse('Error', { status: 500 });
+    }
 }
 
-// Opcionalmente, si quieres manejar solicitudes OPTIONS para CORS preflight
-export async function OPTIONS(request) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*', // Ajusta según tus necesidades de seguridad
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+async function actualizarPagoEnBaseDeDatos(contractID, paymentId, paymentStatus) {
+    // Implementa la lógica para actualizar tu base de datos
+    // Ejemplo (usando una base de datos PostgreSQL):
+    // await db.query('UPDATE contratos SET payment_id = $1, payment_status = $2 WHERE id = $3', [paymentId, paymentStatus, contractID]);
 }
