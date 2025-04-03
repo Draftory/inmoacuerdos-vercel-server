@@ -39,13 +39,28 @@ export async function POST(req) {
     const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
     const preference = new Preference(client);
 
+    // Extract contractID and Contrato from requestBody
+    const { contractID, Contrato, title, quantity, price } = requestBody;
+
+    // Adjust product details based on Contrato
+    let adjustedTitle = title;
+    let adjustedPrice = price;
+
+    if (Contrato === 'Locación de vivienda') {
+      adjustedTitle = 'Locación de vivienda';
+      adjustedPrice = 4999;
+    }
+
+    // Log contractID and Contrato
+    console.log(`contractID: ${contractID}, Contrato: ${Contrato}`);
+
     const preferenceResult = await preference.create({
       body: {
         items: [
           {
-            title: requestBody.title,
-            quantity: Number(requestBody.quantity),
-            unit_price: Number(requestBody.price),
+            title: adjustedTitle,
+            quantity: Number(quantity),
+            unit_price: Number(adjustedPrice),
             currency_id: 'ARS',
           },
         ],
