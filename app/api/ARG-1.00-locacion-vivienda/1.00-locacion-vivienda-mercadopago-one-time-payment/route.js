@@ -36,7 +36,7 @@ export async function POST(request) {
 
   try {
     const req = await request.json();
-    const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
+    const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN }); // Asegúrate de que esta variable tenga el token de la cuenta de Bricks
     const preference = new Preference(client);
 
     const preferenceResult = await preference.create({
@@ -55,18 +55,13 @@ export async function POST(request) {
           pending: 'https://www.inmoacuerdos.com/pago-pendiente',
         },
         auto_return: 'approved',
-        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/1.00-locacion-vivienda-mercadopago-one-time-payment/webhook-mercado-pago',
+        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-1.00-locacion-vivienda/webhook-mercado-pago',
       },
     });
 
-    return new NextResponse(JSON.stringify({ init_point: preferenceResult.init_point }), {
+    return new NextResponse(JSON.stringify({ preferenceId: preferenceResult.id, init_point: preferenceResult.init_point }), {
       status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': origin || '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin || '*' },
     });
   } catch (error) {
     console.error('Error al crear la preferencia:', error);
