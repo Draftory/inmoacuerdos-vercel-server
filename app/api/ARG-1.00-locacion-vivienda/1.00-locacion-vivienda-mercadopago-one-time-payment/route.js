@@ -16,7 +16,7 @@ export async function OPTIONS(request) {
       headers: {
         'Access-Control-Allow-Origin': origin || '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Content-Type', // Asegúrate de incluir Content-Type aquí también
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
     });
   }
