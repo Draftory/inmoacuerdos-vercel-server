@@ -1,51 +1,56 @@
-// app/api/ARG-Mercadopago/webhook-mercado-pago/route.js
+// app/api/process-payment/route.js
+import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { NextResponse } from 'next/server';
-import mercadopago from 'mercadopago';
 
-// Configura tu access token
-mercadopago.configure({
-    access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN,
-});
+const allowedOrigins = [
+  'https://www.inmoacuerdos.com',
+  'https://inmoacuerdos.webflow.io',
+];
 
-export async function POST(req) {
-    try {
-        const payment = req.body;
+export async function OPTIONS(request) {
+  const origin = request.headers.get('origin');
 
-        if (payment.topic === 'merchant_order') {
-            const orderId = payment.resource.split('/').pop(); // Obtiene el ID de la orden
+  if (allowedOrigins.includes(origin)) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin || '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
 
-            // Obtiene los detalles de la orden
-            const order = await mercadopago.merchant_orders.get(orderId);
-
-            if (order.response && order.response.external_reference) {
-                const contractID = order.response.external_reference;
-
-                // Obtiene los detalles de los pagos
-                const payments = order.response.payments;
-
-                for (const payment of payments) {
-                    const paymentId = payment.id;
-                    const paymentStatus = payment.status;
-
-                    // Actualiza tu base de datos
-                    await actualizarPagoEnBaseDeDatos(contractID, paymentId, paymentStatus);
-
-                    console.log(`Pago ${paymentId} (${paymentStatus}) recibido para contrato ${contractID}`);
-                }
-            } else {
-                console.error('No se encontró external_reference en la orden');
-            }
-        }
-
-        return new NextResponse('OK', { status: 200 });
-    } catch (error) {
-        console.error('Error al procesar el webhook:', error);
-        return new NextResponse('Error', { status: 500 });
-    }
+  return new NextResponse(null, { status: 405, body: 'Method Not Allowed' });
 }
 
-async function actualizarPagoEnBaseDeDatos(contractID, paymentId, paymentStatus) {
-    // Implementa la lógica para actualizar tu base de datos
-    // Ejemplo (usando una base de datos PostgreSQL):
-    // await db.query('UPDATE contratos SET payment_id = $1, payment_status = $2 WHERE id = $3', [paymentId, paymentStatus, contractID]);
+export async function POST(request) {
+  const origin = request.headers.get('origin');
+
+  if (!allowedOrigins.includes(origin)) {
+    return new NextResponse(JSON.stringify({ error: 'Not allowed origin' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    const reqBody = await request.json();
+    const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
+    const payment = new Payment(client);
+
+    const paymentResult = await payment.create({
+      body: reqBody,
+    });
+
+    console.log('Resultado del pago:', paymentResult);
+
+    return NextResponse.json(paymentResult.toJSON());
+  } catch (error) {
+    console.error('Error al crear el pago:', error);
+    return new NextResponse(JSON.stringify({ error: 'Error al procesar el pago' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
