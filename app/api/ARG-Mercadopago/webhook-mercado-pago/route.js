@@ -42,7 +42,7 @@ export async function POST(request) {
           console.log('Datos a enviar a Google Sheets:', updateData);
 
           // URL de tu función de Vercel para Google Sheets
-          const googleSheetsApiUrl = '/api/ARG-Mercadopago/update-payment-status';
+          const googleSheetsApiUrl = `${process.env.VERCEL_URL}/api/ARG-Mercadopago/update-payment-status`;
 
           try {
             const response = await fetch(googleSheetsApiUrl, {
