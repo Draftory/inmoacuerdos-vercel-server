@@ -50,7 +50,9 @@ export async function POST(request) {
         signatureTemplate = signatureTemplate.slice(0, -1);
       }
 
-      console.log('Template de firma:', signatureTemplate);
+      console.log('dataId:', dataId);
+      console.log('requestIdHeader:', requestIdHeader);
+      console.log('Template de firma (justo antes del cálculo):', signatureTemplate);
 
       // 5. Calcular la firma esperada
       const expectedSignature = crypto
