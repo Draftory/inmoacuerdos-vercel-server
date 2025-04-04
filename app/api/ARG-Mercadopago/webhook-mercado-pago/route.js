@@ -1,58 +1,57 @@
-import crypto from 'crypto';
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).send('Método no permitido');
+    return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  try {
-    const signatureHeader = req.headers['x-signature'];
-    const requestId = req.headers['x-request-id'];
+  // 🔐 Verificación del token enviado por Mercado Pago
+  const webhookToken = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
+  const incomingToken = req.headers.authorization?.replace('Bearer ', '');
 
-    if (!signatureHeader || !requestId) {
-      return res.status(400).send('Faltan headers');
-    }
+  if (incomingToken !== webhookToken) {
+    return res.status(401).json({ error: 'Token inválido' });
+  }
 
-    const [tsPart, hashPart] = signatureHeader.split(',');
-    const ts = tsPart.split('=')[1];
-    const signatureFromHeader = hashPart.split('=')[1];
+  const { type, action, data } = req.body;
 
-    const dataId = req.body?.data?.id;
-    if (!dataId) {
-      return res.status(400).send('Falta data.id');
-    }
+  // Solo nos interesa el evento de pago creado
+  if (type === 'payment' && action === 'payment.created') {
+    const paymentId = data.id;
 
-    const secret = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
+    try {
+      const mpAccessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
-    const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
-    const generatedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(manifest)
-      .digest('hex');
-
-    if (generatedSignature !== signatureFromHeader) {
-      return res.status(403).send('Firma inválida');
-    }
-
-    // Firma válida, ahora buscamos el pago con el Access Token
-    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-    const paymentRes = await fetch(
-      `https://api.mercadopago.com/v1/payments/${dataId}`,
-      {
+      // Consultar los detalles del pago usando la API de Mercado Pago
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        method: 'GET',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+          Authorization: `Bearer ${mpAccessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Error al consultar el pago:', errorData);
+        return res.status(500).json({ error: 'Error al consultar el pago' });
       }
-    );
 
-    const paymentData = await paymentRes.json();
+      const paymentInfo = await response.json();
 
-    // Ahora podés procesar el pago como quieras
-    console.log('💰 Pago recibido:', paymentData);
+      // 🎯 Acá podés hacer lo que necesites con el pago: actualizar tu base de datos, enviar emails, etc.
+      console.log('✅ Pago recibido:', {
+        id: paymentInfo.id,
+        status: paymentInfo.status,
+        email: paymentInfo.payer?.email,
+        monto: paymentInfo.transaction_amount,
+      });
 
-    return res.status(200).json({ success: true });
-  } catch (err) {
-    console.error('❌ Error en webhook:', err);
-    return res.status(500).send('Error interno');
+      return res.status(200).json({ received: true });
+    } catch (error) {
+      console.error('❌ Error en el webhook:', error);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
   }
+
+  // Si no es un evento relevante, devolver 200 igual para que MP no lo reintente
+  return res.status(200).json({ ignored: true });
 }
