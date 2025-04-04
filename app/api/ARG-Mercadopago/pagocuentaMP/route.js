@@ -42,20 +42,13 @@ export async function POST(req) {
     // Extract contractID and Contrato from requestBody
     const { contractID, Contrato, title, quantity, price } = requestBody;
 
-    console.log('Datos recibidos en la API de preferencias:', { contractID, Contrato, title, quantity, price });
-
     // Adjust product details based on Contrato
     let adjustedTitle = title;
     let adjustedPrice = price;
 
-    console.log('Valores iniciales:', { adjustedTitle, adjustedPrice });
-
-    if (Contrato === 'LocaciÃ³n de vivienda') {
+    if (Contrato === 'Locación de vivienda') {
       adjustedTitle = 'InmoAcuerdos - Contrato de locación de vivienda';
       adjustedPrice = 4999;
-      console.log('Contrato es "LocaciÃ³n de vivienda". Valores ajustados:', { adjustedTitle, adjustedPrice });
-    } else {
-      console.log('Contrato NO es "LocaciÃ³n de vivienda". Se mantienen los valores originales.');
     }
 
     // Log contractID and Contrato
