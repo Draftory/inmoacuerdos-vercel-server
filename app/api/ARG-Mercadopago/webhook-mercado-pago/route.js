@@ -1,70 +1,59 @@
-import { createHmac } from 'node:crypto';
+// api/webhook-mercado-pago.js
+import { MercadoPagoConfig } from 'mercadopago';
+import crypto from 'crypto';
 
-export default async function handler(req, res) {
-  // Solo procesar peticiones POST
-  if (req.method !== 'POST') {
-    return res.status(405).send('Method Not Allowed');
-  }
+const MERCADO_PAGO_SECRET_KEY = process.env.MERCADO_PAGO_SECRET_KEY; // Asegúrate de tener esta variable de entorno configurada
 
-  // Obtener los headers
-  const xSignature = req.headers['x-signature'];
-  const xRequestId = req.headers['x-request-id'];
+export default async (req, res) => {
+  if (req.method === 'POST') {
+    try {
+      const paymentId = req.query.id;
+      const topic = req.query.topic;
 
-  // Obtener el data.id de los query params
-  const dataID = req.query['data.id'];
+      console.log('Notificación recibida:', { paymentId, topic });
 
-  if (!xSignature || !xRequestId || !dataID) {
-    console.error('Faltan headers o data.id');
-    return res.status(400).send('Missing required headers or data.id');
-  }
-
-  // Separando el x-signature en partes
-  const parts = xSignature.split(',');
-  let ts;
-  let hash;
-
-  parts.forEach(part => {
-    const [key, value] = part.split('=');
-    if (key && value) {
-      const trimmedKey = key.trim();
-      const trimmedValue = value.trim();
-      if (trimmedKey === 'ts') {
-        ts = trimmedValue;
-      } else if (trimmedKey === 'v1') {
-        hash = trimmedValue;
+      // **PASO 1: Verificar la autenticidad de la notificación**
+      const signature = req.headers['x-signature'];
+      if (!signature || !MERCADO_PAGO_SECRET_KEY) {
+        console.error('Firma no encontrada o clave secreta no configurada.');
+        return res.status(400).send('Firma no válida');
       }
+
+      const [ts, v1] = signature.split(',');
+      const tsValue = ts.split('=')[1];
+      const v1Value = v1.split('=')[1];
+
+      const data = `id=${paymentId};request-id=;ts=${tsValue};`; // Adaptar según la documentación
+
+      const hmac = crypto.createHmac('sha256', MERCADO_PAGO_SECRET_KEY);
+      hmac.update(data);
+      const generatedSignature = hmac.digest('hex');
+
+      if (generatedSignature !== v1Value) {
+        console.error('Firma de Mercado Pago no válida.');
+        return res.status(400).send('Firma no válida');
+      }
+
+      // **PASO 2: Consultar los detalles del pago**
+      const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
+      const payment = await client.payment.get({ id: paymentId });
+      console.log('Detalles del pago:', payment);
+
+      if (payment.status === 200 && payment.data.status === 'approved') {
+        // **PASO 3: Actualizar Google Sheets**
+        // Aquí iría tu lógica para interactuar con la API de Google Sheets
+        console.log(`Pago ${paymentId} aprobado. Actualizando Google Sheets...`);
+      } else {
+        console.log(`El pago ${paymentId} no fue aprobado o hubo un problema.`);
+      }
+
+      res.status(200).send('OK');
+    } catch (error) {
+      console.error('Error al procesar la notificación:', error);
+      res.status(500).send('Error al procesar la notificación');
     }
-  });
-
-  if (!ts || !hash) {
-    console.error('No se pudieron extraer ts o v1 de x-signature');
-    return res.status(400).send('Could not extract ts or v1 from x-signature');
-  }
-
-  // Obtener la clave secreta de las variables de entorno
-  const secret = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
-
-  if (!secret) {
-    console.error('La clave secreta del webhook de Mercado Pago no está configurada como variable de entorno.');
-    return res.status(500).send('Mercado Pago webhook secret key not configured.');
-  }
-
-  // Generar el manifest string
-  const manifest = `id:${dataID};request-id:${xRequestId};ts:${ts};`;
-
-  // Crear un HMAC signature
-  const hmac = createHmac('sha256', secret);
-  hmac.update(manifest);
-  const sha = hmac.digest('hex');
-
-  // Verificar la firma
-  if (sha === hash) {
-    console.log("HMAC verification passed");
-    // Aquí puedes procesar la información del webhook (req.body) de forma segura
-    console.log("Webhook body:", req.body);
-    return res.status(200).send('Webhook recibido y verificado');
   } else {
-    console.error("HMAC verification failed");
-    return res.status(401).send('HMAC verification failed');
+    res.setHeader('Allow', ['POST']);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-}
+};
