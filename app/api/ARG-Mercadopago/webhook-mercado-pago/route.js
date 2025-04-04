@@ -1,20 +1,22 @@
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    // Leer los parámetros de consulta (aunque el método sea POST)
-    const { 'data.id': dataId, type } = req.query;
+import { NextResponse } from 'next/server';
 
-    console.log('Webhook Recibida (POST con parámetros en la URL):');
-    console.log({ dataId, type });
+export async function POST(request) {
+  const searchParams = new URL(request.url).searchParams;
+  const dataId = searchParams.get('data.id');
+  const type = searchParams.get('type');
 
-    // Aquí puedes procesar la información
-    if (type === 'payment') {
-      console.log(`ID de pago recibido (POST): ${dataId}`);
-      // Agrega aquí tu lógica para el evento de pago recibido por POST
-    }
+  console.log('Webhook Recibida (POST con parámetros en la URL - App Router):');
+  console.log({ dataId, type });
 
-    res.status(200).json({ received: true, method: 'POST', query_params: req.query });
-  } else {
-    res.setHeader('Allow', ['POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+  if (type === 'payment') {
+    console.log(`ID de pago recibido (POST - App Router): ${dataId}`);
+    // Agrega aquí tu lógica para el evento de pago
   }
+
+  return NextResponse.json({ received: true, method: 'POST', query_params: Object.fromEntries(searchParams) });
 }
+
+// Opcionalmente, si no vas a manejar GET, puedes omitir esta función
+// export async function GET(request) {
+//   return NextResponse.json({ message: 'GET method not supported for this route' }, { status: 405 });
+// }
