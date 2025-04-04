@@ -1,59 +1,44 @@
-// api/webhook-mercado-pago.js
-import { MercadoPagoConfig } from 'mercadopago';
-import crypto from 'crypto';
-
-const MERCADO_PAGO_SECRET_KEY = process.env.MERCADO_PAGO_SECRET_KEY; // Asegúrate de tener esta variable de entorno configurada
-
-export default async (req, res) => {
+export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
-      const paymentId = req.query.id;
-      const topic = req.query.topic;
-
-      console.log('Notificación recibida:', { paymentId, topic });
-
-      // **PASO 1: Verificar la autenticidad de la notificación**
-      const signature = req.headers['x-signature'];
-      if (!signature || !MERCADO_PAGO_SECRET_KEY) {
-        console.error('Firma no encontrada o clave secreta no configurada.');
-        return res.status(400).send('Firma no válida');
+      // 1. Verificar el tipo de contenido (opcional pero recomendado)
+      if (req.headers['content-type'] !== 'application/json') {
+        return res.status(400).json({ error: 'Content-Type debe ser application/json' });
       }
 
-      const [ts, v1] = signature.split(',');
-      const tsValue = ts.split('=')[1];
-      const v1Value = v1.split('=')[1];
+      // 2. Parsear el cuerpo de la solicitud JSON
+      const webhookData = await req.json();
 
-      const data = `id=${paymentId};request-id=;ts=${tsValue};`; // Adaptar según la documentación
-
-      const hmac = crypto.createHmac('sha256', MERCADO_PAGO_SECRET_KEY);
-      hmac.update(data);
-      const generatedSignature = hmac.digest('hex');
-
-      if (generatedSignature !== v1Value) {
-        console.error('Firma de Mercado Pago no válida.');
-        return res.status(400).send('Firma no válida');
+      // 3. Validar la estructura básica del JSON (opcional pero recomendado)
+      if (!webhookData || !webhookData.action || !webhookData.data || !webhookData.data.id) {
+        return res.status(400).json({ error: 'Estructura JSON inválida' });
       }
 
-      // **PASO 2: Consultar los detalles del pago**
-      const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
-      const payment = await client.payment.get({ id: paymentId });
-      console.log('Detalles del pago:', payment);
+      // 4. Procesar la información de la webhook
+      console.log('Webhook Recibida:', webhookData);
 
-      if (payment.status === 200 && payment.data.status === 'approved') {
-        // **PASO 3: Actualizar Google Sheets**
-        // Aquí iría tu lógica para interactuar con la API de Google Sheets
-        console.log(`Pago ${paymentId} aprobado. Actualizando Google Sheets...`);
-      } else {
-        console.log(`El pago ${paymentId} no fue aprobado o hubo un problema.`);
+      // Aquí puedes agregar tu lógica de negocio para manejar el evento 'payment.created'
+      // Por ejemplo, podrías:
+      // - Guardar la información en una base de datos.
+      // - Actualizar el estado de un pedido.
+      // - Enviar una notificación.
+
+      if (webhookData.action === 'payment.created') {
+        const paymentId = webhookData.data.id;
+        console.log(`Pago creado con ID: ${paymentId}`);
+        // Aquí tu lógica específica para el evento 'payment.created'
       }
 
-      res.status(200).send('OK');
+      // 5. Enviar una respuesta exitosa (código 200 OK)
+      res.status(200).json({ received: true });
+
     } catch (error) {
-      console.error('Error al procesar la notificación:', error);
-      res.status(500).send('Error al procesar la notificación');
+      console.error('Error al procesar la webhook:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
     }
   } else {
+    // Manejar otros métodos HTTP (si es necesario)
     res.setHeader('Allow', ['POST']);
     res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-};
+}
