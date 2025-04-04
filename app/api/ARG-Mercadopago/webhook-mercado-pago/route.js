@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
 // Importante: Asegúrate de que la variable de entorno esté configurada en Vercel.
-const MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
+const MERCADO_PAGO_SECRET_KEY = process.env.MERCADO_PAGO_SECRET_KEY; // Cambiamos el nombre de la variable
 
 export async function POST(request) {
   const searchParams = new URL(request.url).searchParams;
@@ -17,8 +17,8 @@ export async function POST(request) {
   const requestIdHeader = request.headers.get('x-request-id');
 
   // 2. Validar que la clave secreta esté configurada
-  if (!MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN) {
-    console.error('Error: La clave secreta del webhook de Mercado Pago no está configurada (MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN).');
+  if (!MERCADO_PAGO_SECRET_KEY) { // Usamos el nuevo nombre de la variable
+    console.error('Error: La clave secreta del webhook de Mercado Pago no está configurada (MERCADO_PAGO_SECRET_KEY).');
     return NextResponse.json({ error: 'Clave secreta no configurada' }, { status: 500 });
   }
 
@@ -56,7 +56,7 @@ export async function POST(request) {
 
       // 5. Calcular la firma esperada
       const expectedSignature = crypto
-        .createHmac('sha256', MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN)
+        .createHmac('sha256', MERCADO_PAGO_SECRET_KEY) // Usamos el nuevo nombre de la variable
         .update(signatureTemplate)
         .digest('hex');
 
