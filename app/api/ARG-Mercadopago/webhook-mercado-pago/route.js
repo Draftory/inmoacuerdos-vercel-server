@@ -15,8 +15,3 @@ export async function POST(request) {
 
   return NextResponse.json({ received: true, method: 'POST', query_params: Object.fromEntries(searchParams) });
 }
-
-// Opcionalmente, si no vas a manejar GET, puedes omitir esta función
-// export async function GET(request) {
-//   return NextResponse.json({ message: 'GET method not supported for this route' }, { status: 405 });
-// }
