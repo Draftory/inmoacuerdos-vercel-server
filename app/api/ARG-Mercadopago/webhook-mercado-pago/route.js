@@ -1,8 +1,5 @@
-// /api/webhook-mercadopago.js
-
 import { google } from 'googleapis';
-
-const { JWT } = google.auth;
+import { auth } from 'google-auth-library';
 
 // Accediendo a las variables de entorno
 const SPREADSHEET_ID = process.env.LOCACION_POST_DATABASE_SHEET_ID;
@@ -47,14 +44,8 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
       return false;
     }
 
-    const client = new JWT({
-      email: credentials.client_email,
-      key: credentials.private_key,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-
-    await client.authorize();
-
+    const client = auth.fromJSON(credentials);
+    client.scopes = ['https://www.googleapis.com/auth/spreadsheets'];
     const sheets = google.sheets({ version: 'v4', auth: client });
 
     const response = await sheets.spreadsheets.values.get({
@@ -62,7 +53,7 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
       range: `${SHEET_NAME}!A:Z`,
     });
 
-    const rows = response.data.values;
+    const rows = response.data?.values;
     if (rows) {
       const headerRow = rows[0] || [];
       const contractIdColumnIndex = headerRow.findIndex(header => header.toLowerCase() === 'contractid');
@@ -139,9 +130,9 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
   }
 }
 
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    const { body } = req;
+export async function POST(req) {
+  try {
+    const body = await req.json();
     console.log('Webhook recibido:', body);
 
     if (body && body.type === 'payment' && body.data && body.data.id) {
@@ -161,13 +152,13 @@ export default async function handler(req, res) {
       } else {
         console.log(`El pago no fue aprobado o no se encontró la referencia externa para el ID: ${paymentId}. Detalles:`, paymentDetails);
       }
-      res.status(200).send('OK');
+      return new Response('OK', { status: 200 });
     } else {
       console.log('Webhook recibido con formato incorrecto:', body);
-      res.status(400).send('Bad Request');
+      return new Response('Bad Request', { status: 400 });
     }
-  } else {
-    res.setHeader('Allow', ['POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+  } catch (error) {
+    console.error('Error al procesar la notificación:', error);
+    return new Response('Error', { status: 500 });
   }
 }
