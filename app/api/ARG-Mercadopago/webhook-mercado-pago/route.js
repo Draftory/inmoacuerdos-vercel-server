@@ -21,10 +21,50 @@ export async function POST(request) {
         // Obtiene los detalles del pago desde la API de Mercado Pago
         const paymentDetails = await payment.get({ id: dataId });
         const contractId = paymentDetails.external_reference;
+        const paymentStatus = paymentDetails.status;
+        const paymentDate = paymentDetails.date_approved; // Fecha de aprobación del pago
 
         if (contractId) {
           console.log(`contractID asociado al pago ${dataId}: ${contractId}`);
-          // Aquí puedes implementar tu lógica que utiliza el contractID
+          console.log(`Estado del pago ${dataId}: ${paymentStatus}`);
+          console.log(`Fecha de pago ${dataId}: ${paymentDate}`);
+
+          // Construir el formObject para actualizar Google Sheets
+          const updateData = {
+            contractID: contractId, // Necesario para identificar la fila
+            payment_id: dataId,
+            estadoDePago: paymentStatus === 'approved' ? 'Pagado' : paymentStatus,
+            fechaDePago: paymentDate ? new Date(paymentDate).toISOString() : null, // Formatear la fecha
+            // Asegúrate de que 'contractID' también sea una columna en tu GSheet
+            // para que la función de actualización pueda encontrar la fila correcta.
+          };
+
+          console.log('Datos a enviar a Google Sheets:', updateData);
+
+          // URL de tu función de Vercel para Google Sheets
+          const googleSheetsApiUrl = '/api/ARG-Mercadopago/update-payment-status';
+
+          try {
+            const response = await fetch(googleSheetsApiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(updateData),
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              console.log('Google Sheets actualizado exitosamente:', result);
+            } else {
+              console.error('Error al actualizar Google Sheets:', response.status, response.statusText);
+              const errorResult = await response.json();
+              console.error('Google Sheets error details:', errorResult);
+            }
+          } catch (error) {
+            console.error('Error al hacer la petición a Google Sheets:', error);
+          }
+
         } else {
           console.log(`No se encontró external_reference para el pago ${dataId}`);
         }
