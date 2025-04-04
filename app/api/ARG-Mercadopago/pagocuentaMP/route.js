@@ -46,8 +46,8 @@ export async function POST(req) {
     let adjustedTitle = title;
     let adjustedPrice = price;
 
-    if (Contrato === 'Locación de vivienda') {
-      adjustedTitle = 'InmoAcuerdos - Contrato de locación de vivienda';
+    if (Contrato === 'LocaciÃ³n de vivienda') {
+      adjustedTitle = 'InmoAcuerdos - Contrato de locaciÃ³n de vivienda';
       adjustedPrice = 4999;
     }
 
@@ -65,11 +65,12 @@ export async function POST(req) {
           },
         ],
         back_urls: {
-          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de éxito
+          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de Ã©xito
           failure: 'https://www.inmoacuerdos.com/pago-fallido', // Reemplaza con tu URL de fallo
           pending: 'https://www.inmoacuerdos.com/pago-pendiente', // Reemplaza con tu URL de pendiente
         },
         auto_return: 'approved',
+        external_reference: contractID, // Incluimos el contractID aquí
       },
     });
 
