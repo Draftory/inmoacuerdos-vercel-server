@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 
 export default async function handler(req, res) {
-  // Solo procesar peticiones POST (los webhooks de Mercado Pago son POST)
+  // Solo procesar peticiones POST
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -42,11 +42,11 @@ export default async function handler(req, res) {
   }
 
   // Obtener la clave secreta de las variables de entorno
-  const secret = process.env.MERCADO_PAGO_SECRET;
+  const secret = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
 
   if (!secret) {
-    console.error('La clave secreta de Mercado Pago no está configurada como variable de entorno.');
-    return res.status(500).send('Mercado Pago secret key not configured.');
+    console.error('La clave secreta del webhook de Mercado Pago no está configurada como variable de entorno.');
+    return res.status(500).send('Mercado Pago webhook secret key not configured.');
   }
 
   // Generar el manifest string
