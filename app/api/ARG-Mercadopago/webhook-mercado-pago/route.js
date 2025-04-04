@@ -1,57 +1,59 @@
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método no permitido' });
-  }
+// api/webhook-mercado-pago.js
+import { MercadoPagoConfig } from 'mercadopago';
+import crypto from 'crypto';
 
-  // 🔐 Verificación del token enviado por Mercado Pago
-  const webhookToken = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
-  const incomingToken = req.headers.authorization?.replace('Bearer ', '');
+const MERCADO_PAGO_SECRET_KEY = process.env.MERCADO_PAGO_SECRET_KEY; // Asegúrate de tener esta variable de entorno configurada
 
-  if (incomingToken !== webhookToken) {
-    return res.status(401).json({ error: 'Token inválido' });
-  }
-
-  const { type, action, data } = req.body;
-
-  // Solo nos interesa el evento de pago creado
-  if (type === 'payment' && action === 'payment.created') {
-    const paymentId = data.id;
-
+export default async (req, res) => {
+  if (req.method === 'POST') {
     try {
-      const mpAccessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      const paymentId = req.query.id;
+      const topic = req.query.topic;
 
-      // Consultar los detalles del pago usando la API de Mercado Pago
-      const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${mpAccessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      console.log('Notificación recibida:', { paymentId, topic });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Error al consultar el pago:', errorData);
-        return res.status(500).json({ error: 'Error al consultar el pago' });
+      // **PASO 1: Verificar la autenticidad de la notificación**
+      const signature = req.headers['x-signature'];
+      if (!signature || !MERCADO_PAGO_SECRET_KEY) {
+        console.error('Firma no encontrada o clave secreta no configurada.');
+        return res.status(400).send('Firma no válida');
       }
 
-      const paymentInfo = await response.json();
+      const [ts, v1] = signature.split(',');
+      const tsValue = ts.split('=')[1];
+      const v1Value = v1.split('=')[1];
 
-      // 🎯 Acá podés hacer lo que necesites con el pago: actualizar tu base de datos, enviar emails, etc.
-      console.log('✅ Pago recibido:', {
-        id: paymentInfo.id,
-        status: paymentInfo.status,
-        email: paymentInfo.payer?.email,
-        monto: paymentInfo.transaction_amount,
-      });
+      const data = `id=${paymentId};request-id=;ts=${tsValue};`; // Adaptar según la documentación
 
-      return res.status(200).json({ received: true });
+      const hmac = crypto.createHmac('sha256', MERCADO_PAGO_SECRET_KEY);
+      hmac.update(data);
+      const generatedSignature = hmac.digest('hex');
+
+      if (generatedSignature !== v1Value) {
+        console.error('Firma de Mercado Pago no válida.');
+        return res.status(400).send('Firma no válida');
+      }
+
+      // **PASO 2: Consultar los detalles del pago**
+      const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
+      const payment = await client.payment.get({ id: paymentId });
+      console.log('Detalles del pago:', payment);
+
+      if (payment.status === 200 && payment.data.status === 'approved') {
+        // **PASO 3: Actualizar Google Sheets**
+        // Aquí iría tu lógica para interactuar con la API de Google Sheets
+        console.log(`Pago ${paymentId} aprobado. Actualizando Google Sheets...`);
+      } else {
+        console.log(`El pago ${paymentId} no fue aprobado o hubo un problema.`);
+      }
+
+      res.status(200).send('OK');
     } catch (error) {
-      console.error('❌ Error en el webhook:', error);
-      return res.status(500).json({ error: 'Error interno del servidor' });
+      console.error('Error al procesar la notificación:', error);
+      res.status(500).send('Error al procesar la notificación');
     }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-
-  // Si no es un evento relevante, devolver 200 igual para que MP no lo reintente
-  return res.status(200).json({ ignored: true });
-}
+};
