@@ -1,11 +1,13 @@
 import { google } from 'googleapis';
 import { auth } from 'google-auth-library';
+import crypto from 'crypto';
 
 // Accediendo a las variables de entorno
 const SPREADSHEET_ID = process.env.LOCACION_POST_DATABASE_SHEET_ID;
 const SHEET_NAME = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
 const GOOGLE_CREDENTIALS_SECRET = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-const ACCESS_TOKEN = process.env.MERCADO_PAGO_WEBHOOK_ACCESS_TOKEN;
+const ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN; // Usando el nombre de variable actualizado
+const MERCADO_PAGO_SECRET_KEY = process.env.MERCADO_PAGO_SECRET_KEY; // Usando el nombre de variable actualizado
 const BASE_URL = 'https://api.mercadopago.com';
 
 // Función para obtener las credenciales de Google desde el secreto
@@ -22,7 +24,7 @@ async function getPaymentDetails(paymentId) {
   try {
     const response = await fetch(`${BASE_URL}/v1/payments/${paymentId}`, {
       headers: {
-        'Authorization': `Bearer ${ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${ACCESS_TOKEN}`, // Usando el nombre de variable actualizado
       },
     });
     if (!response.ok) {
@@ -60,6 +62,7 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
       const estadoDePagoColumnIndex = headerRow.findIndex(header => header.toLowerCase() === 'estadodepago');
       const fechaDePagoColumnIndex = headerRow.findIndex(header => header.toLowerCase() === 'fechadepago');
       const paymentIdColumnIndex = headerRow.findIndex(header => header.toLowerCase() === 'payment_id');
+      const statusColumnIndex = headerRow.findIndex(header => header.toLowerCase() === 'status'); // Obtener el índice de la columna "status"
 
       if (contractIdColumnIndex === -1) {
         console.error('No se encontró la columna "contractid" en la hoja de cálculo.');
@@ -96,6 +99,14 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
             console.warn('No se encontró la columna "payment_id".');
           }
 
+          // Actualizar status a "Contrato"
+          if (statusColumnIndex !== -1) {
+            updateValues.push(['Contrato']);
+            updateRanges.push(`${SHEET_NAME}!${String.fromCharCode(65 + statusColumnIndex)}${i + 1}`);
+          } else {
+            console.warn('No se encontró la columna "status". No se activará la generación del documento automáticamente.');
+          }
+
           // Realizar las actualizaciones en lote (más eficiente)
           if (updateValues.length > 0) {
             const batchUpdateRequest = {
@@ -110,7 +121,7 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
               spreadsheetId: SPREADSHEET_ID,
               resource: batchUpdateRequest,
             });
-            console.log(`Estado de pago, fecha de pago y payment_id actualizados para el contrato: ${contractId}`);
+            console.log(`Estado de pago, fecha de pago, payment_id y status actualizados para el contrato: ${contractId}`);
             return true;
           } else {
             console.warn(`No se encontraron columnas para actualizar para el contrato: ${contractId}`);
@@ -132,8 +143,42 @@ async function updatePaymentStatusInSheet(contractId, paymentId) {
 
 export async function POST(req) {
   try {
-    const body = await req.json();
+    const signature = req.headers.get('x-signature');
+    const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
     console.log('Webhook recibido:', body);
+    console.log('Firma recibida:', signature);
+
+    // Validar la firma del webhook (si la clave secreta está configurada)
+    if (MERCADO_PAGO_SECRET_KEY && signature && body && body.data && body.data.id) {
+      const parts = signature.split(',');
+      let ts = null;
+      let v1 = null;
+      for (const part of parts) {
+        const [key, value] = part.split('=');
+        if (key === 'ts') ts = value;
+        if (key === 'v1') v1 = value;
+      }
+
+      if (ts && v1) {
+        const signatureTemplate = `id:${body.data.id};request-id:;ts:${ts};`;
+        const expectedSignature = crypto
+          .createHmac('sha256', MERCADO_PAGO_SECRET_KEY)
+          .update(signatureTemplate)
+          .digest('hex');
+
+        if (expectedSignature !== v1) {
+          console.error('Firma del webhook no válida.');
+          return new Response('Unauthorized', { status: 401 });
+        } else {
+          console.log('Firma del webhook validada correctamente.');
+        }
+      } else {
+        console.warn('No se encontraron ts o v1 en la firma.');
+      }
+    } else if (!MERCADO_PAGO_SECRET_KEY) {
+      console.warn('La clave secreta de Mercado Pago no está configurada. La firma del webhook no se puede validar.');
+    }
 
     if (body && body.type === 'payment' && body.data && body.data.id) {
       const paymentId = body.data.id;
@@ -153,7 +198,11 @@ export async function POST(req) {
         console.log(`El pago no fue aprobado o no se encontró la referencia externa para el ID: ${paymentId}. Detalles:`, paymentDetails);
       }
       return new Response('OK', { status: 200 });
-    } else {
+    } else if (body && body.topic === 'merchant_order') {
+      console.log('Notificación de orden comercial recibida. No se procesa en esta versión.');
+      return new Response('OK', { status: 200 }); // Respondemos OK para evitar reintentos
+    }
+     else {
       console.log('Webhook recibido con formato incorrecto:', body);
       return new Response('Bad Request', { status: 400 });
     }
