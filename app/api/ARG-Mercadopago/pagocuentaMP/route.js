@@ -70,7 +70,6 @@ export async function POST(req) {
           pending: 'https://www.inmoacuerdos.com/pago-pendiente', // Reemplaza con tu URL de pendiente
         },
         auto_return: 'approved',
-        notification_url: 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-Mercadopago/webhook-mercado-pago', // Reemplaza con tu URL de webhook
       },
     });
 
