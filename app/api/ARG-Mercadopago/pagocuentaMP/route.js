@@ -39,20 +39,25 @@ export async function POST(req) {
     const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
     const preference = new Preference(client);
 
-    // Extract contractID and Contrato from requestBody
-    const { contractID, Contrato, title, quantity, price } = requestBody;
+    // Extract contractID, Contrato y MemberstackID del requestBody
+    const { contractID, Contrato, title, quantity, price, MemberstackID } = requestBody;
 
     // Adjust product details based on Contrato
     let adjustedTitle = title;
     let adjustedPrice = price;
 
-    if (Contrato === 'Locación de vivienda') {
-      adjustedTitle = 'InmoAcuerdos - Contrato de locación de vivienda';
+    if (Contrato === 'LocaciÃ³n de vivienda') {
+      adjustedTitle = 'InmoAcuerdos - Contrato de locaciÃ³n de vivienda';
       adjustedPrice = 4999;
     }
 
-    // Log contractID and Contrato
-    console.log(`contractID: ${contractID}, Contrato: ${Contrato}`);
+    // Log contractID, Contrato y MemberstackID
+    console.log(`contractID: ${contractID}, Contrato: ${Contrato}, MemberstackID: ${MemberstackID}`);
+
+    // Construir el external_reference (opcionalmente incluir MemberstackID)
+    const externalReference = MemberstackID
+      ? `${contractID}-${MemberstackID}`
+      : contractID;
 
     const preferenceResult = await preference.create({
       body: {
@@ -65,12 +70,12 @@ export async function POST(req) {
           },
         ],
         back_urls: {
-          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de Ã©xito
+          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de ÃƒÂ©xito
           failure: 'https://www.inmoacuerdos.com/pago-fallido', // Reemplaza con tu URL de fallo
           pending: 'https://www.inmoacuerdos.com/pago-pendiente', // Reemplaza con tu URL de pendiente
         },
         auto_return: 'approved',
-        external_reference: contractID, // Incluimos el contractID aquí
+        external_reference: externalReference, // Incluimos el contractID y opcionalmente MemberstackID
       },
     });
 
