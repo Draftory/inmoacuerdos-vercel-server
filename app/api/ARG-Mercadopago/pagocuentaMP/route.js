@@ -46,8 +46,8 @@ export async function POST(req) {
     let adjustedTitle = title;
     let adjustedPrice = price;
 
-    if (Contrato === 'LocaciÃ³n de vivienda') {
-      adjustedTitle = 'InmoAcuerdos - Contrato de locaciÃ³n de vivienda';
+    if (Contrato === 'Locación de vivienda') {
+      adjustedTitle = 'InmoAcuerdos - Contrato de locaón de vivienda';
       adjustedPrice = 4999;
     }
 
