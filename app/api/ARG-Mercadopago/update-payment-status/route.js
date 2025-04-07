@@ -1,4 +1,3 @@
-// app/api/ARG-Mercadopago/update-payment-status/route.js
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 
@@ -36,7 +35,7 @@ export async function POST(req) {
 
   try {
     const paymentData = await req.json();
-    const { contractID, payment_id, estadoDePago, fechaDePago } = paymentData;
+    const { contractID, payment_id, estadoDePago, fechaDePago, tipoDePago } = paymentData; // Incluimos tipoDePago
 
     console.log('Datos de pago recibidos (Server-Side):', paymentData);
 
@@ -90,6 +89,7 @@ export async function POST(req) {
     const paymentIdColumnIndex = headerRow.indexOf('payment_id');
     const estadoDePagoColumnIndex = headerRow.indexOf('estadoDePago');
     const fechaDePagoColumnIndex = headerRow.indexOf('fechaDePago');
+    const tipoDePagoColumnIndex = headerRow.indexOf('tipoDePago'); // Encontramos la columna tipoDePago
 
     if (contractIDColumnIndex === -1) {
       throw new Error('contractID column not found in the header.');
@@ -102,6 +102,9 @@ export async function POST(req) {
     }
     if (fechaDePagoColumnIndex === -1) {
       throw new Error('fechaDePago column not found in the header.');
+    }
+    if (tipoDePagoColumnIndex === -1) {
+      throw new Error('tipoDePago column not found in the header.'); // Verificamos que la columna exista
     }
 
     // Retrieve all rows to search for contractID
@@ -126,12 +129,14 @@ export async function POST(req) {
         [payment_id || ''],
         [estadoDePago || ''],
         [fechaDePago || ''],
+        [tipoDePago || ''], // Agregamos el tipoDePago a los valores a actualizar
       ];
 
       const columnLetters = [
         getColumnLetter(paymentIdColumnIndex + 1),
         getColumnLetter(estadoDePagoColumnIndex + 1),
         getColumnLetter(fechaDePagoColumnIndex + 1),
+        getColumnLetter(tipoDePagoColumnIndex + 1), // Agregamos la columna tipoDePago
       ];
 
       // Update the specific columns
