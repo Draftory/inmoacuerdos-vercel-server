@@ -20,9 +20,9 @@ export async function POST(request) {
       try {
         // Obtiene los detalles del pago desde la API de Mercado Pago
         const paymentDetails = await payment.get({ id: dataId });
-        const externalReference = paymentDetails.external_reference; // Cambié contractId a externalReference
+        const externalReference = paymentDetails.external_reference;
         const paymentStatus = paymentDetails.status;
-        const paymentDate = paymentDetails.date_approved; // Fecha de aprobaciÃ³n del pago
+        const paymentDate = paymentDetails.date_approved;
 
         if (externalReference) {
           console.log(`external_reference asociado al pago ${dataId}: ${externalReference}`);
@@ -31,32 +31,34 @@ export async function POST(request) {
 
           let contractId;
           let memberstackId;
+          let tipoDePago;
 
-          // Intenta dividir el external_reference si incluiste el MemberstackID
-          if (externalReference.includes('-mem_')) { // Asumiendo que los Memberstack IDs contienen '-mem_'
-            const parts = externalReference.split('-');
-            contractId = parts[0];
-            memberstackId = parts[1];
-          } else {
-            contractId = externalReference;
-            memberstackId = null;
-          }
+          const parts = externalReference.split('-');
+          contractId = parts[0];
+
+          // Intenta extraer MemberstackID (asumiendo que sigue al contractId y comienza con 'mem_')
+          memberstackId = parts.find(part => part.startsWith('mem_')) || null;
+
+          // Intenta extraer tipoDePago (asumiendo que es el último elemento si MemberstackID está presente, o el segundo si no)
+          tipoDePago = memberstackId ? parts[parts.length - 1] : parts[1];
 
           console.log(`contractID extraído: ${contractId}`);
           console.log(`MemberstackID extraído: ${memberstackId}`);
+          console.log(`tipoDePago extraído: ${tipoDePago}`);
 
-          // Construir el formObject para actualizar Google Sheets
+          // Construir el objeto para actualizar Google Sheets
           const updateData = {
-            contractID: contractId, // Usa el contractId extraído
+            contractID: contractId,
             payment_id: dataId,
             estadoDePago: paymentStatus === 'approved' ? 'Pagado' : paymentStatus,
             fechaDePago: paymentDate ? new Date(paymentDate).toISOString() : null,
-            memberstackID: memberstackId, // Incluye el memberstackId para Google Sheets
+            memberstackID: memberstackId,
+            tipoDePago: tipoDePago,
           };
 
           console.log('Datos a enviar a Google Sheets:', updateData);
 
-          // URL de tu funciÃ³n de Vercel para Google Sheets
+          // URL de tu función de Vercel para Google Sheets
           const googleSheetsApiUrl = 'https://inmoacuerdos-vercel-server.vercel.app/api/ARG-Mercadopago/update-payment-status';
 
           try {
@@ -77,11 +79,11 @@ export async function POST(request) {
               console.error('Google Sheets error details:', errorResult);
             }
           } catch (error) {
-            console.error('Error al hacer la peticiÃ³n a Google Sheets:', error);
+            console.error('Error al hacer la petición a Google Sheets:', error);
           }
 
         } else {
-          console.log(`No se encontrÃ³ external_reference para el pago ${dataId}`);
+          console.log(`No se encontró external_reference para el pago ${dataId}`);
         }
 
       } catch (error) {

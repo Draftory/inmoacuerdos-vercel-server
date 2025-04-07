@@ -42,22 +42,30 @@ export async function POST(req) {
     // Extract contractID, Contrato y MemberstackID del requestBody
     const { contractID, Contrato, title, quantity, price, MemberstackID } = requestBody;
 
-    // Adjust product details based on Contrato
+    // Adjust product details based on Contrato y determinar tipoDePago
     let adjustedTitle = title;
     let adjustedPrice = price;
+    let tipoDePago = null;
 
     if (Contrato === 'Locación de vivienda') {
-      adjustedTitle = 'InmoAcuerdos - Contrato de locaón de vivienda';
+      adjustedTitle = 'InmoAcuerdos - Contrato de locación de vivienda';
       adjustedPrice = 4999;
+      tipoDePago = 'Contrato Individual';
     }
 
-    // Log contractID, Contrato y MemberstackID
-    console.log(`contractID: ${contractID}, Contrato: ${Contrato}, MemberstackID: ${MemberstackID}`);
+    // Log contractID, Contrato, MemberstackID y tipoDePago
+    console.log(`contractID: ${contractID}, Contrato: ${Contrato}, MemberstackID: ${MemberstackID}, tipoDePago: ${tipoDePago}`);
 
-    // Construir el external_reference (opcionalmente incluir MemberstackID)
-    const externalReference = MemberstackID
-      ? `${contractID}-${MemberstackID}`
-      : contractID;
+    // Construir el external_reference
+    let externalReference = contractID;
+
+    if (MemberstackID) {
+      externalReference += `-${MemberstackID}`;
+    }
+
+    if (tipoDePago) {
+      externalReference += `-${tipoDePago}`;
+    }
 
     const preferenceResult = await preference.create({
       body: {
@@ -70,12 +78,12 @@ export async function POST(req) {
           },
         ],
         back_urls: {
-          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de ÃƒÂ©xito
+          success: 'https://www.inmoacuerdos.com/pago-exitoso', // Reemplaza con tu URL de ÃƒÆ’Ã‚Â©xito
           failure: 'https://www.inmoacuerdos.com/pago-fallido', // Reemplaza con tu URL de fallo
           pending: 'https://www.inmoacuerdos.com/pago-pendiente', // Reemplaza con tu URL de pendiente
         },
         auto_return: 'approved',
-        external_reference: externalReference, // Incluimos el contractID y opcionalmente MemberstackID
+        external_reference: externalReference, // Incluimos contractID, MemberstackID (opcional) y tipoDePago (opcional)
       },
     });
 
