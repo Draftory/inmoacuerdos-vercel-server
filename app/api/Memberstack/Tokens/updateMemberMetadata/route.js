@@ -1,11 +1,8 @@
-// app/api/Memberstack/Tokens/updateMemberMetadata/route.js
-import { Memberstack } from '@memberstack/admin';
+import memberstackAdmin from "@memberstack/admin";
 import { NextResponse } from 'next/server';
 
-// Inicializa Memberstack fuera del handler para que se ejecute solo una vez por cold start
-const memberstack = new Memberstack({
-  secretKey: process.env.MEMBERSTACK_SECRET_KEY,
-});
+// Inicializa Memberstack fuera del handler
+const memberstack = memberstackAdmin.init(process.env.MEMBERSTACK_SECRET_KEY);
 
 export async function POST(request) {
   try {
