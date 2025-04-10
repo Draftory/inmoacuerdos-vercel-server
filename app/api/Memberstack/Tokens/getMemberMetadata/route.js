@@ -1,6 +1,8 @@
+// app/api/Memberstack/Tokens/getMemberMetadata/route.js
 import { Memberstack } from '@memberstack/admin';
 import { NextResponse } from 'next/server';
 
+// Inicializa Memberstack fuera del handler para que se ejecute solo una vez por cold start
 const memberstack = new Memberstack({
   secretKey: process.env.MEMBERSTACK_SECRET_KEY,
 });
