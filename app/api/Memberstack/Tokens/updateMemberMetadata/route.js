@@ -1,3 +1,4 @@
+// app/api/Memberstack/Tokens/updateMemberMetadata/route.js
 import memberstackAdmin from "@memberstack/admin";
 import { NextResponse } from 'next/server';
 
@@ -8,14 +9,35 @@ export async function POST(request) {
   try {
     const { memberId, newMetadata } = await request.json();
 
-    if (!memberId || !newMetadata || typeof newMetadata !== 'object') {
-      return NextResponse.json({ error: 'Se requieren el ID del miembro y la nueva metadata (un objeto).' }, { status: 400 });
+    if (!memberId || !newMetadata || typeof newMetadata !== 'object' || typeof newMetadata.tokens === 'undefined') {
+      return NextResponse.json({ error: 'Se requieren el ID del miembro y la nueva metadata con la clave "tokens".' }, { status: 400 });
     }
+
+    // Obtener la información actual del miembro para acceder a la metadata actual
+    const { data: currentMember } = await memberstack.members.retrieve({
+      id: memberId,
+    });
+
+    if (!currentMember) {
+      return NextResponse.json({ error: 'Miembro no encontrado para actualizar los tokens.' }, { status: 404 });
+    }
+
+    const currentTokens = parseInt(currentMember.metaData?.tokens || 0, 10);
+    const amountToChange = parseInt(newMetadata.tokens, 10); // Debería ser -1 desde App Script
+
+    if (isNaN(currentTokens) || isNaN(amountToChange)) {
+      return NextResponse.json({ error: 'Los valores de tokens actual o a cambiar no son números válidos.' }, { status: 400 });
+    }
+
+    const updatedTokens = currentTokens + amountToChange;
 
     const { data: updatedMember } = await memberstack.members.update({
       id: memberId,
       data: {
-        metaData: newMetadata,
+        metaData: {
+          ...currentMember.metaData, // Mantener otras claves de metadata
+          tokens: updatedTokens,
+        },
       },
     });
 
