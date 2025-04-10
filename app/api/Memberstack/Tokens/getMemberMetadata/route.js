@@ -1,33 +1,30 @@
 import { Memberstack } from '@memberstack/admin';
+import { NextResponse } from 'next/server';
 
 const memberstack = new Memberstack({
   secretKey: process.env.MEMBERSTACK_SECRET_KEY,
 });
 
-export default async function handler(req, res) {
-  if (req.method === 'GET') {
-    const { memberId } = req.query;
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const memberId = searchParams.get('memberId');
 
-    if (!memberId) {
-      return res.status(400).json({ error: 'Se requiere el ID del miembro.' });
+  if (!memberId) {
+    return NextResponse.json({ error: 'Se requiere el ID del miembro.' }, { status: 400 });
+  }
+
+  try {
+    const { data: member } = await memberstack.members.retrieve({
+      id: memberId,
+    });
+
+    if (!member) {
+      return NextResponse.json({ error: 'Miembro no encontrado.' }, { status: 404 });
     }
 
-    try {
-      const { data: member } = await memberstack.members.retrieve({
-        id: memberId,
-      });
-
-      if (!member) {
-        return res.status(404).json({ error: 'Miembro no encontrado.' });
-      }
-
-      return res.status(200).json({ metadata: member.metaData });
-    } catch (error) {
-      console.error('Error al obtener la metadata del miembro:', error);
-      return res.status(500).json({ error: 'Error al obtener la metadata del miembro.' });
-    }
-  } else {
-    res.setHeader('Allow', ['GET']);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    return NextResponse.json({ metadata: member.metaData });
+  } catch (error) {
+    console.error('Error al obtener la metadata del miembro:', error);
+    return NextResponse.json({ error: 'Error al obtener la metadata del miembro.' }, { status: 500 });
   }
 }

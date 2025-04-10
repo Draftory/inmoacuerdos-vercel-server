@@ -1,32 +1,28 @@
 import { Memberstack } from '@memberstack/admin';
+import { NextResponse } from 'next/server';
 
 const memberstack = new Memberstack({
   secretKey: process.env.MEMBERSTACK_SECRET_KEY,
 });
 
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    const { memberId, newMetadata } = req.body;
+export async function POST(request) {
+  try {
+    const { memberId, newMetadata } = await request.json();
 
     if (!memberId || !newMetadata || typeof newMetadata !== 'object') {
-      return res.status(400).json({ error: 'Se requieren el ID del miembro y la nueva metadata (un objeto).' });
+      return NextResponse.json({ error: 'Se requieren el ID del miembro y la nueva metadata (un objeto).' }, { status: 400 });
     }
 
-    try {
-      const { data: updatedMember } = await memberstack.members.update({
-        id: memberId,
-        data: {
-          metaData: newMetadata,
-        },
-      });
+    const { data: updatedMember } = await memberstack.members.update({
+      id: memberId,
+      data: {
+        metaData: newMetadata,
+      },
+    });
 
-      return res.status(200).json({ message: 'Metadata del miembro actualizada exitosamente.', metadata: updatedMember.metaData });
-    } catch (error) {
-      console.error('Error al actualizar la metadata del miembro:', error);
-      return res.status(500).json({ error: 'Error al actualizar la metadata del miembro.' });
-    }
-  } else {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    return NextResponse.json({ message: 'Metadata del miembro actualizada exitosamente.', metadata: updatedMember.metaData });
+  } catch (error) {
+    console.error('Error al actualizar la metadata del miembro:', error);
+    return NextResponse.json({ error: 'Error al actualizar la metadata del miembro.' }, { status: 500 });
   }
 }
