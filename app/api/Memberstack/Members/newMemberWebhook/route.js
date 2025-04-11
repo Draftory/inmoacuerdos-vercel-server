@@ -1,5 +1,4 @@
 // app/api/Memberstack/Members/newMemberWebhook/route.js
-import { Webflow } from '@webflow/api'; // You might still have this import, remove if not using
 import fetch from 'node-fetch';
 
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
