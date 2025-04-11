@@ -17,7 +17,8 @@
     "mercadopago": "^2.4.0",
     "next": "15.2.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "webflow-api": "^3.1.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
