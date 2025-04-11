@@ -11,24 +11,6 @@ const WEBFLOW_API_VERSION = 'v2';
 // Initialize Memberstack Admin SDK
 const memberstack = memberstackAdmin.init(MEMBERSTACK_SECRET_KEY);
 
-async function checkExistingWebflowItem(email) {
-  const response = await fetch(
-    `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items?limit=1&field=email,${email}`,
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${WEBFLOW_API_TOKEN}`,
-      },
-    }
-  );
-  if (response.ok) {
-    const data = await response.json();
-    return data.items.length > 0;
-  }
-  console.error('Error checking existing Webflow item:', response.status, await response.text());
-  return false;
-}
-
 export async function POST(req) {
   try {
     const memberstackData = await req.json();
@@ -44,16 +26,6 @@ export async function POST(req) {
       console.error('Error: Missing required Memberstack data.');
       return new Response(JSON.stringify({ error: 'Missing required Memberstack data.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Basic Idempotency Check: Check if a Webflow item with this email already exists
-    const itemExists = await checkExistingWebflowItem(email);
-    if (itemExists) {
-      console.log(`Webflow item with email ${email} already exists. Skipping creation.`);
-      return new Response(JSON.stringify({ success: true, message: 'Webflow item already exists.' }), {
-        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
