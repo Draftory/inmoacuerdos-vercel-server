@@ -14,7 +14,7 @@ export async function POST(req) {
 
     const memberstackId = memberstackData.payload?.id;
     const email = memberstackData.payload?.auth?.email;
-    const name = memberstackData.payload?.customFields?.name;
+    const name = memberstackData.payload?.customFields?.['first-name']; // Corrected line
 
     console.log('Extracted Data:', { memberstackId, email, name });
 
