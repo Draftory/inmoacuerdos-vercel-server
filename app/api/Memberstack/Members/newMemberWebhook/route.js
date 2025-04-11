@@ -1,4 +1,5 @@
 // app/api/Memberstack/Members/newMemberWebhook/route.js
+import memberstackAdmin from "@memberstack/admin";
 import fetch from 'node-fetch';
 
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
@@ -6,6 +7,27 @@ const MEMBERSTACK_SECRET_KEY = process.env.MEMBERSTACK_SECRET_KEY;
 const WEBFLOW_USER_COLLECTION_ID = process.env.WEBFLOW_USER_COLLECTION_ID;
 const WEBFLOW_API_BASE_URL = 'https://api.webflow.com';
 const WEBFLOW_API_VERSION = 'v2';
+
+// Initialize Memberstack Admin SDK
+const memberstack = memberstackAdmin.init(MEMBERSTACK_SECRET_KEY);
+
+async function checkExistingWebflowItem(email) {
+  const response = await fetch(
+    `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items?limit=1&field=email,${email}`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${WEBFLOW_API_TOKEN}`,
+      },
+    }
+  );
+  if (response.ok) {
+    const data = await response.json();
+    return data.items.length > 0;
+  }
+  console.error('Error checking existing Webflow item:', response.status, await response.text());
+  return false;
+}
 
 export async function POST(req) {
   try {
@@ -26,8 +48,18 @@ export async function POST(req) {
       });
     }
 
+    // Basic Idempotency Check: Check if a Webflow item with this email already exists
+    const itemExists = await checkExistingWebflowItem(email);
+    if (itemExists) {
+      console.log(`Webflow item with email ${email} already exists. Skipping creation.`);
+      return new Response(JSON.stringify({ success: true, message: 'Webflow item already exists.' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // 1. Create a new live item in Webflow using fetch
-    const slug = name.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+    const slug = memberstackId;
     const webflowCreateItemPayload = {
       isArchived: false,
       isDraft: false,
@@ -58,41 +90,29 @@ export async function POST(req) {
       console.log('Webflow Create Item Response Data:', JSON.stringify(webflowItemData, null, 2));
       const webflowItemId = webflowItemData.id;
 
-      // 2. Update Memberstack member
+      // 2. Update Memberstack member using @memberstack/admin
       const loginRedirectUrl = `/usuario/${memberstackId}`;
-      const memberstackUpdatePayload = {
-        loginRedirect: loginRedirectUrl,
-        'Unique Webflow ID': webflowItemId,
-      };
-      console.log('Memberstack Update Payload:', JSON.stringify(memberstackUpdatePayload, null, 2));
-
-      const updateMemberstackResponse = await fetch(
-        `https://api.memberstack.com/v1/members/${memberstackId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${MEMBERSTACK_SECRET_KEY}`,
+      try {
+        const { data: updatedMember } = await memberstack.members.update({
+          id: memberstackId,
+          data: {
+            loginRedirect: loginRedirectUrl,
+            metaData: {
+              'Unique Webflow ID': webflowItemId,
+            },
           },
-          body: JSON.stringify(memberstackUpdatePayload),
-        }
-      );
-
-      console.log('Memberstack Update Response Status:', updateMemberstackResponse.status);
-      if (updateMemberstackResponse.ok) {
-        const memberstackUpdateData = await updateMemberstackResponse.json();
-        console.log('Memberstack Update Response Data:', JSON.stringify(memberstackUpdateData, null, 2));
+        });
+        console.log('Memberstack member updated successfully:', updatedMember);
         return new Response(JSON.stringify({ success: true, webflowItemId, loginRedirectUrl }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
-      } else {
-        const errorData = await updateMemberstackResponse.json();
-        console.error('Error updating Memberstack member:', errorData);
+      } catch (error) {
+        console.error('Error updating Memberstack member:', error);
         return new Response(
-          JSON.stringify({ error: 'Failed to update Memberstack member.', details: errorData }),
+          JSON.stringify({ error: 'Failed to update Memberstack member.', details: error }),
           {
-            status: updateMemberstackResponse.status,
+            status: 500,
             headers: { 'Content-Type': 'application/json' },
           }
         );
