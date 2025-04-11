@@ -13,9 +13,11 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Se requieren el ID del miembro y el ID del plan.' }, { status: 400 });
     }
 
-    await memberstack.members.removeFromPlan({
-      memberId: memberId,
-      planId: planId,
+    await memberstack.members.removeFreePlan({ // Usamos removeFreePlan para cualquier plan
+      id: memberId,
+      data: {
+        planId: planId,
+      },
     });
 
     return NextResponse.json({ message: 'Miembro removido del plan exitosamente.' });
