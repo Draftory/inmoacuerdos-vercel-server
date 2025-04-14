@@ -90,6 +90,7 @@ export async function POST(req) {
     const estadoDePagoColumnIndex = headerRow.indexOf('estadoDePago');
     const fechaDePagoColumnIndex = headerRow.indexOf('fechaDePago');
     const tipoDePagoColumnIndex = headerRow.indexOf('tipoDePago'); // Encontramos la columna tipoDePago
+    const statusColumnIndex = headerRow.indexOf('status'); // Encontramos la columna status
 
     if (contractIDColumnIndex === -1) {
       throw new Error('contractID column not found in the header.');
@@ -105,6 +106,9 @@ export async function POST(req) {
     }
     if (tipoDePagoColumnIndex === -1) {
       throw new Error('tipoDePago column not found in the header.'); // Verificamos que la columna exista
+    }
+    if (statusColumnIndex === -1) {
+      throw new Error('status column not found in the header.'); // Verificamos que la columna status exista
     }
 
     // Retrieve all rows to search for contractID
@@ -126,10 +130,10 @@ export async function POST(req) {
 
     if (rowIndex !== -1) {
       const updateValues = [
-        [payment_id || ''],
-        [estadoDePago || ''],
-        [fechaDePago || ''],
-        [tipoDePago || ''], // Agregamos el tipoDePago a los valores a actualizar
+        payment_id || '',
+        estadoDePago || '',
+        fechaDePago || '',
+        tipoDePago || '', // Agregamos el tipoDePago a los valores a actualizar
       ];
 
       const columnLetters = [
@@ -147,11 +151,25 @@ export async function POST(req) {
             range: `${sheetName}!${columnLetter}${rowIndex}`,
             valueInputOption: 'RAW',
             requestBody: {
-              values: [updateValues[index]],
+              values: [[updateValues[index]]], // Ensure the value is an array within an array
             },
           })
         )
       );
+
+      // Update the 'status' column to 'Contrato' if the payment is successful
+      if (estadoDePago && estadoDePago.toLowerCase() === 'success') {
+        const statusColumnLetter = getColumnLetter(statusColumnIndex + 1);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetName}!${statusColumnLetter}${rowIndex}`,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: [['Contrato']],
+          },
+        });
+        console.log(`Status updated to 'Contrato' for contractID: ${contractID} in row ${rowIndex}`);
+      }
 
       console.log(`Payment details updated for contractID: ${contractID} in row ${rowIndex}`);
       return new NextResponse(
