@@ -36,8 +36,7 @@ export async function POST(req) {
 
   try {
     const { contractID, memberstackID } = await req.json();
-
-    console.log("Data received for Token payment update (Server-Side):", {
+    console.log("Received data for Token payment update (Server-Side):", {
       contractID,
       memberstackID,
     });
@@ -94,9 +93,9 @@ export async function POST(req) {
 
     const contractIDColumnIndex = headerRow.indexOf("contractID");
     const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
-    const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago");
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
+    const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
 
     if (contractIDColumnIndex === -1) {
@@ -105,14 +104,14 @@ export async function POST(req) {
     if (memberstackIDColumnIndex === -1) {
       throw new Error("MemberstackID column not found in the header.");
     }
-    if (paymentIdColumnIndex === -1) {
-      throw new Error("payment_id column not found in the header.");
-    }
     if (tipoDePagoColumnIndex === -1) {
       throw new Error("tipoDePago column not found in the header.");
     }
     if (estadoDePagoColumnIndex === -1) {
       throw new Error("estadoDePago column not found in the header.");
+    }
+    if (paymentIdColumnIndex === -1) {
+      throw new Error("payment_id column not found in the header.");
     }
     if (fechaDePagoColumnIndex === -1) {
       throw new Error("fechaDePago column not found in the header.");
@@ -144,50 +143,26 @@ export async function POST(req) {
         timeZone: "America/Argentina/Buenos_Aires",
       });
 
-      const paymentIdColumnLetter = getColumnLetter(paymentIdColumnIndex + 1);
-      const tipoDePagoColumnLetter = getColumnLetter(tipoDePagoColumnIndex + 1);
-      const estadoDePagoColumnLetter = getColumnLetter(
-        estadoDePagoColumnIndex + 1
-      );
-      const fechaDePagoColumnLetter = getColumnLetter(
-        fechaDePagoColumnIndex + 1
-      );
+      // Create an array to hold the updated values for the entire row
+      const updatedRowValues = allRows[rowIndex - 1] || []; // Get the existing row or an empty array
 
-      // Update the columns
-      await Promise.all([
-        sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!${paymentIdColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [[paymentId]],
-          },
-        }),
-        sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!${tipoDePagoColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [["Token"]],
-          },
-        }),
-        sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!${estadoDePagoColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [["Pagado"]],
-          },
-        }),
-        sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!${fechaDePagoColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [[nowArgentina]],
-          },
-        }),
-      ]);
+      // Update the specific columns
+      updatedRowValues[tipoDePagoColumnIndex] = "Token";
+      updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
+      updatedRowValues[paymentIdColumnIndex] = paymentId;
+      updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
+
+      const lastColumnLetter = getColumnLetter(updatedRowValues.length);
+
+      // Update the entire row with the modified values
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [updatedRowValues],
+        },
+      });
 
       console.log(
         `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
