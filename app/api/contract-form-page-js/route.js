@@ -1,4 +1,3 @@
-// pages/api/contract-form-page-js.js
 import { NextResponse } from "next/server";
 import fs from "fs/promises"; // Using the promises API for cleaner async operations
 import path from "path";
