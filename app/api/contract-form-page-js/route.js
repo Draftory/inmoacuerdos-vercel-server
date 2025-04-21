@@ -33,8 +33,7 @@ export async function GET(req) {
     "Content-Type": "text/html",
   };
 
-  const scriptUrl =
-    "https://inmoacuerdos-vercel-server.vercel.app/public/frontend-js-scripts/editor-documentos-form-js.js";
+  const scriptUrl = "/frontend-js-scripts/editor-documentos-form-js.js";
 
   const injectionCode = `<script src="${scriptUrl}"></script>`;
 
