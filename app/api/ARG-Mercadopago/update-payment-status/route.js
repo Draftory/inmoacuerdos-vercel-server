@@ -24,6 +24,7 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
   console.log("Starting API request to Google Sheets for payment update");
+  console.log("Request Body:", await req.json()); // Agrega esta línea
   const origin = req.headers.get("origin");
   const headers = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
