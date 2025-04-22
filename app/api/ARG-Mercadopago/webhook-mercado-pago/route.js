@@ -7,7 +7,12 @@ export async function POST(request) {
     const type = requestBody?.type;
     const dataId = requestBody?.data?.id;
 
-    console.log("Webhook Recibida (POST):");
+    console.log(
+      "Webhook Recibida (POST) - Posadas, Misiones, Argentina:",
+      new Date().toLocaleString("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
+      })
+    );
     console.log({ dataId, type });
 
     if (type === "payment" && dataId) {
@@ -31,19 +36,26 @@ export async function POST(request) {
             `external_reference asociado al pago ${dataId}: ${externalReference}`
           );
           console.log(`Estado del pago ${dataId}: ${paymentStatus}`);
-          console.log(`Fecha de pago ${dataId}: ${paymentDate}`);
+          console.log(
+            `Fecha de pago ${dataId}: ${
+              paymentDate
+                ? new Date(paymentDate).toLocaleString("es-AR", {
+                    timeZone: "America/Argentina/Buenos_Aires",
+                  })
+                : null
+            }`
+          );
 
-          const contractId = externalReference; // Usamos el externalReference completo como contractId
+          const parts = externalReference.split("-");
+          const contractId = parts[0]; // Tomamos la primera parte como contractID
           let memberstackId;
           let tipoDePago;
 
-          const parts = externalReference.split("-");
-          // memberstackId = parts.find(part => part.startsWith('mem_')) || null;
-          // tipoDePago = memberstackId ? parts[parts.length - 1] : parts[1];
-          //
-          // Hemos simplificado la extracción de contractId.
-          // Si necesitas extraer MemberstackID y tipoDePago de manera diferente,
-          // ajusta la lógica aquí según la estructura de tus external_reference.
+          // Intenta extraer MemberstackID (asumiendo que sigue al contractId y comienza con 'mem_')
+          memberstackId = parts.find((part) => part.startsWith("mem_")) || null;
+
+          // Intenta extraer tipoDePago (asumiendo que es el segundo elemento)
+          tipoDePago = parts[1] || null;
 
           console.log(`contractID extraído: ${contractId}`);
           console.log(`MemberstackID extraído: ${memberstackId}`);
