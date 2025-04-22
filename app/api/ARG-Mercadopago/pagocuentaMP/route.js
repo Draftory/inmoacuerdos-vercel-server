@@ -50,8 +50,8 @@ export async function POST(req) {
     let adjustedPrice = price;
     let tipoDePago = null;
 
-    if (Contrato === "Locación de vivienda") {
-      adjustedTitle = "InmoAcuerdos - Contrato de locación de vivienda";
+    if (Contrato === "LocaciÃ³n de vivienda") {
+      adjustedTitle = "InmoAcuerdos - Contrato de locaciÃ³n de vivienda";
       adjustedPrice = 4999;
       tipoDePago = "Contrato Individual";
     }
@@ -61,15 +61,15 @@ export async function POST(req) {
       `contractID: ${contractID}, Contrato: ${Contrato}, MemberstackID: ${MemberstackID}, tipoDePago: ${tipoDePago}`
     );
 
-    // Construir el external_reference
+    // Construir el external_reference utilizando guiones bajos como separadores
     let externalReference = contractID;
 
     if (MemberstackID) {
-      externalReference += `-${MemberstackID}`;
+      externalReference += `_${MemberstackID}`;
     }
 
     if (tipoDePago) {
-      externalReference += `-${tipoDePago}`;
+      externalReference += `_${tipoDePago}`;
     }
 
     const preferenceResult = await preference.create({
@@ -83,12 +83,12 @@ export async function POST(req) {
           },
         ],
         back_urls: {
-          success: "https://www.inmoacuerdos.com/pago-exitoso", // Reemplaza con tu URL de ÃƒÆ’Ã‚Â©xito
+          success: "https://www.inmoacuerdos.com/pago-exitoso", // Reemplaza con tu URL de ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito
           failure: "https://www.inmoacuerdos.com/pago-fallido", // Reemplaza con tu URL de fallo
           pending: "https://www.inmoacuerdos.com/pago-pendiente", // Reemplaza con tu URL de pendiente
         },
         auto_return: "approved",
-        external_reference: externalReference, // Incluimos contractID, MemberstackID (opcional) y tipoDePago (opcional)
+        external_reference: externalReference, // Incluimos contractID, MemberstackID (opcional) y tipoDePago (opcional) separados por guion bajo
       },
     });
 
