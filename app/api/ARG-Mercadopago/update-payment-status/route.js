@@ -24,7 +24,6 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
   console.log("Starting API request to Google Sheets for payment update");
-  console.log("Request Body:", await req.json()); // Agrega esta línea
   const origin = req.headers.get("origin");
   const headers = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
@@ -35,17 +34,18 @@ export async function POST(req) {
   };
 
   try {
+    // Leer el cuerpo de la solicitud una sola vez
     const paymentData = await req.json();
-    // Incluimos external_reference en la desestructuración
-    const { payment_id, estadoDePago, fechaDePago, external_reference } =
-      paymentData;
+    console.log("Request Body:", paymentData); // Usar la variable paymentData
 
+    // Incluimos external_reference en la desestructuración
+    const { payment_id, estadoDePago, fechaDePago } = paymentData;
     // Asignamos el external_reference completo a contractID
-    const contractID = external_reference;
+    const contractID = paymentData.external_reference; // Acceder a external_reference desde paymentData
     console.log(
       "external_reference asociado al pago",
       payment_id + ":",
-      external_reference
+      paymentData.external_reference // Acceder a external_reference desde paymentData
     );
     console.log("contractID extraído:", contractID);
 
@@ -156,7 +156,8 @@ export async function POST(req) {
 
       // Si la columna tipoDePago existe, también la actualizamos
       if (tipoDePagoColumnIndex !== -1) {
-        const tipoDePagoExtraido = externalReference.split("-")[1] || ""; // Intentamos extraer la parte que antes era tipoDePago
+        const tipoDePagoExtraido =
+          paymentData.external_reference?.split("_")[2] || ""; // Intentamos extraer la parte que ahora es tipoDePago
         updateValues.push(tipoDePagoExtraido);
         columnLetters.push(getColumnLetter(tipoDePagoColumnIndex + 1));
       }
