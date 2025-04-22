@@ -7,12 +7,7 @@ export async function POST(request) {
     const type = requestBody?.type;
     const dataId = requestBody?.data?.id;
 
-    console.log(
-      "Webhook Recibida (POST) - Posadas, Misiones, Argentina:",
-      new Date().toLocaleString("es-AR", {
-        timeZone: "America/Argentina/Buenos_Aires",
-      })
-    );
+    console.log("Webhook Recibida (POST):");
     console.log({ dataId, type });
 
     if (type === "payment" && dataId) {
@@ -36,20 +31,20 @@ export async function POST(request) {
             `external_reference asociado al pago ${dataId}: ${externalReference}`
           );
           console.log(`Estado del pago ${dataId}: ${paymentStatus}`);
-          console.log(
-            `Fecha de pago ${dataId}: ${
-              paymentDate
-                ? new Date(paymentDate).toLocaleString("es-AR", {
-                    timeZone: "America/Argentina/Buenos_Aires",
-                  })
-                : null
-            }`
-          );
+          console.log(`Fecha de pago ${dataId}: ${paymentDate}`);
 
-          const parts = externalReference.split("_");
-          const contractId = parts[0] || null;
-          const memberstackId = parts[1] || null;
-          const tipoDePago = parts[2]?.replace(/_/g, " ") || null;
+          let contractId;
+          let memberstackId;
+          let tipoDePago;
+
+          const parts = externalReference.split("-");
+          contractId = parts[0];
+
+          // Intenta extraer MemberstackID (asumiendo que sigue al contractId y comienza con 'mem_')
+          memberstackId = parts.find((part) => part.startsWith("mem_")) || null;
+
+          // Intenta extraer tipoDePago (asumiendo que es el último elemento si MemberstackID está presente, o el segundo si no)
+          tipoDePago = memberstackId ? parts[parts.length - 1] : parts[1];
 
           console.log(`contractID extraído: ${contractId}`);
           console.log(`MemberstackID extraído: ${memberstackId}`);

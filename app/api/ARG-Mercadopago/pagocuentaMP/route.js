@@ -1,3 +1,4 @@
+// app/api/create-preference-pro/route.js
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { NextResponse } from "next/server";
 
@@ -49,8 +50,8 @@ export async function POST(req) {
     let adjustedPrice = price;
     let tipoDePago = null;
 
-    if (Contrato === "LocaciÃ³n de vivienda") {
-      adjustedTitle = "InmoAcuerdos - Contrato de locaciÃ³n de vivienda";
+    if (Contrato === "Locación de vivienda") {
+      adjustedTitle = "InmoAcuerdos - Contrato de locación de vivienda";
       adjustedPrice = 4999;
       tipoDePago = "Contrato Individual";
     }
@@ -60,15 +61,15 @@ export async function POST(req) {
       `contractID: ${contractID}, Contrato: ${Contrato}, MemberstackID: ${MemberstackID}, tipoDePago: ${tipoDePago}`
     );
 
-    // Construir el external_reference con guiones bajos como delimitadores
+    // Construir el external_reference
     let externalReference = contractID;
 
     if (MemberstackID) {
-      externalReference += `_${MemberstackID}`;
+      externalReference += `-${MemberstackID}`;
     }
 
     if (tipoDePago) {
-      externalReference += `_${tipoDePago.replace(/ /g, "_")}`; // Reemplazamos espacios con guiones bajos
+      externalReference += `-${tipoDePago}`;
     }
 
     const preferenceResult = await preference.create({
@@ -82,12 +83,12 @@ export async function POST(req) {
           },
         ],
         back_urls: {
-          success: "https://www.inmoacuerdos.com/pago-exitoso", // Reemplaza con tu URL de ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito
+          success: "https://www.inmoacuerdos.com/pago-exitoso", // Reemplaza con tu URL de ÃƒÆ’Ã‚Â©xito
           failure: "https://www.inmoacuerdos.com/pago-fallido", // Reemplaza con tu URL de fallo
           pending: "https://www.inmoacuerdos.com/pago-pendiente", // Reemplaza con tu URL de pendiente
         },
         auto_return: "approved",
-        external_reference: externalReference,
+        external_reference: externalReference, // Incluimos contractID, MemberstackID (opcional) y tipoDePago (opcional)
       },
     });
 
