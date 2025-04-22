@@ -47,14 +47,16 @@ export async function POST(request) {
           );
 
           const parts = externalReference.split("-");
-          const contractId = parts[0]; // Tomamos la primera parte como contractID
+          // El contractID debería ser la parte antes del último "-Contrato Individual"
+          const contractId = parts.slice(0, -1).join("-");
+
           let memberstackId;
           let tipoDePago;
 
-          // Intenta extraer MemberstackID (asumiendo que sigue al contractId y comienza con 'mem_')
+          // Intenta extraer MemberstackID (si sigue un patrón)
           memberstackId = parts.find((part) => part.startsWith("mem_")) || null;
 
-          // Intenta extraer tipoDePago (asumiendo que es el segundo elemento)
+          // Intenta extraer tipoDePago (siempre es la segunda parte)
           tipoDePago = parts[1] || null;
 
           console.log(`contractID extraído: ${contractId}`);
