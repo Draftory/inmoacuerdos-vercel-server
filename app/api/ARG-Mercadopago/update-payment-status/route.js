@@ -39,26 +39,11 @@ export async function POST(req) {
     console.log("Request Body:", paymentData); // Usar la variable paymentData
 
     // Desestructuramos los datos que necesitamos
-    const { payment_id, estadoDePago, fechaDePago, contractID } = paymentData; // Incluimos contractID
+    const { payment_id, estadoDePago, fechaDePago, contractID, tipoDePago } =
+      paymentData; // Incluimos tipoDePago
 
     console.log("contractID recibido:", contractID);
-
-    let tipoDePagoExtraido = null;
-    if (contractID) {
-      const parts = contractID.split("_");
-      // Si hay tres partes o más, asumimos que la última es tipoDePago
-      if (parts.length >= 3) {
-        tipoDePagoExtraido = parts[parts.length - 1];
-      } else if (parts.length === 2) {
-        // Si hay dos partes, podría ser contractID_tipoDePago (si MemberstackID no está)
-        // Tendríamos que ver si la segunda parte no empieza con 'mem_' para distinguirlo
-        if (!parts[1]?.startsWith("mem_")) {
-          tipoDePagoExtraido = parts[1];
-        }
-      }
-    }
-
-    console.log("tipoDePagoExtraido:", tipoDePagoExtraido);
+    console.log("tipoDePago recibido:", tipoDePago);
 
     console.log("Datos de pago recibidos (Server-Side):", paymentData);
 
@@ -114,7 +99,7 @@ export async function POST(req) {
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago"); // Todavía buscamos la columna por si existe
+    const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago"); // Ya no necesitamos la lógica de extracción compleja
     const statusColumnIndex = headerRow.indexOf("status"); // Encontramos la columna status
 
     if (contractIDColumnIndex === -1) {
@@ -128,6 +113,11 @@ export async function POST(req) {
     }
     if (fechaDePagoColumnIndex === -1) {
       throw new Error("fechaDePago column not found in the header.");
+    }
+    if (tipoDePagoColumnIndex === -1) {
+      console.log(
+        "Warning: tipoDePago column not found in the header. Skipping update for this column."
+      );
     }
     if (statusColumnIndex === -1) {
       throw new Error("status column not found in the header."); // Verificamos que la columna status exista
@@ -150,39 +140,33 @@ export async function POST(req) {
       }
     }
 
-    if (rowIndex !== -1 && tipoDePagoColumnIndex !== -1) {
+    if (rowIndex !== -1) {
       const updateValues = [
         payment_id || "",
         estadoDePago === "approved" ? "Pagado" : estadoDePago || "", // Traducimos 'approved' a 'Pagado'
         fechaDePago ? new Date(fechaDePago).toISOString() : "", // Formateamos la fecha a UTC
-        tipoDePagoExtraido || "", // Usamos el tipoDePagoExtraido
       ];
       const columnLetters = [
         getColumnLetter(paymentIdColumnIndex + 1),
         getColumnLetter(estadoDePagoColumnIndex + 1),
         getColumnLetter(fechaDePagoColumnIndex + 1),
-        getColumnLetter(tipoDePagoColumnIndex + 1),
       ];
 
-      // Filter out undefined or null values and corresponding column letters
-      const validUpdateValues = [];
-      const validColumnLetters = [];
-      updateValues.forEach((value, index) => {
-        if (value !== undefined) {
-          validUpdateValues.push(value);
-          validColumnLetters.push(columnLetters[index]);
-        }
-      });
+      // Si la columna tipoDePago existe, también la actualizamos
+      if (tipoDePagoColumnIndex !== -1 && tipoDePago !== undefined) {
+        updateValues.push(tipoDePago);
+        columnLetters.push(getColumnLetter(tipoDePagoColumnIndex + 1));
+      }
 
       // Update the specific columns
       await Promise.all(
-        validColumnLetters.map((columnLetter, index) =>
+        columnLetters.map((columnLetter, index) =>
           sheets.spreadsheets.values.update({
             spreadsheetId,
             range: `${sheetName}!${columnLetter}${rowIndex}`,
             valueInputOption: "RAW",
             requestBody: {
-              values: [[validUpdateValues[index]]], // Ensure the value is an array within an array
+              values: [[updateValues[index]]], // Ensure the value is an array within an array
             },
           })
         )
@@ -209,60 +193,6 @@ export async function POST(req) {
       );
       return new NextResponse(
         JSON.stringify({ message: "Payment details updated successfully." }),
-        {
-          status: 200,
-          headers: headers,
-        }
-      );
-    } else if (rowIndex !== -1) {
-      // Si no se encontró la columna tipoDePago, actualizamos los otros campos
-      const updateValues = [
-        payment_id || "",
-        estadoDePago === "approved" ? "Pagado" : estadoDePago || "", // Traducimos 'approved' a 'Pagado'
-        fechaDePago ? new Date(fechaDePago).toISOString() : "", // Formateamos la fecha a UTC
-      ];
-      const columnLetters = [
-        getColumnLetter(paymentIdColumnIndex + 1),
-        getColumnLetter(estadoDePagoColumnIndex + 1),
-        getColumnLetter(fechaDePagoColumnIndex + 1),
-      ];
-
-      await Promise.all(
-        columnLetters.map((columnLetter, index) =>
-          sheets.spreadsheets.values.update({
-            spreadsheetId,
-            range: `${sheetName}!${columnLetter}${rowIndex}`,
-            valueInputOption: "RAW",
-            requestBody: {
-              values: [[updateValues[index]]], // Ensure the value is an array within an array
-            },
-          })
-        )
-      );
-
-      if (estadoDePago && estadoDePago.toLowerCase() === "approved") {
-        const statusColumnLetter = getColumnLetter(statusColumnIndex + 1);
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!${statusColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [["Contrato"]],
-          },
-        });
-        console.log(
-          `Status updated to 'Contrato' for contractID: ${contractID} in row ${rowIndex}`
-        );
-      }
-
-      console.log(
-        `Payment details updated for contractID: ${contractID} in row ${rowIndex}`
-      );
-      return new NextResponse(
-        JSON.stringify({
-          message:
-            "Payment details updated successfully (tipoDePago might be missing).",
-        }),
         {
           status: 200,
           headers: headers,
