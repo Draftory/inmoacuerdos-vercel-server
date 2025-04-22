@@ -1,19 +1,19 @@
-import { google } from 'googleapis';
-import { NextResponse } from 'next/server';
+import { google } from "googleapis";
+import { NextResponse } from "next/server";
 
 const allowedOrigins = [
-  'https://www.inmoacuerdos.com',
-  'https://inmoacuerdos.webflow.io',
+  "https://www.inmoacuerdos.com",
+  "https://inmoacuerdos.webflow.io",
 ];
 
 export async function OPTIONS(req) {
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get("origin");
   const headers = {
-    'Access-Control-Allow-Origin': allowedOrigins.includes(origin)
+    "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   return new NextResponse(null, {
@@ -23,55 +23,71 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log('Starting API request to Google Sheets for payment update');
-  const origin = req.headers.get('origin');
+  console.log("Starting API request to Google Sheets for payment update");
+  const origin = req.headers.get("origin");
   const headers = {
-    'Access-Control-Allow-Origin': allowedOrigins.includes(origin)
+    "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   try {
     const paymentData = await req.json();
-    const { contractID, payment_id, estadoDePago, fechaDePago, tipoDePago } = paymentData; // Incluimos tipoDePago
+    const { payment_id, estadoDePago, fechaDePago } = paymentData; // Quitamos contractID y tipoDePago de aquí
 
-    console.log('Datos de pago recibidos (Server-Side):', paymentData);
+    // Extraemos el external_reference para obtener el contractID completo
+    const externalReference = paymentData.external_reference;
+    console.log(
+      "external_reference asociado al pago",
+      payment_id + ":",
+      externalReference
+    );
+
+    const contractID = externalReference; // Usamos el external_reference completo como contractID
+    console.log("contractID extraído:", contractID);
+
+    // Si necesitas extraer el tipoDePago de alguna manera, podrías hacerlo aquí
+    // Por ejemplo, si sigue un patrón específico dentro del externalReference
+
+    console.log("Datos de pago recibidos (Server-Side):", paymentData);
 
     if (!contractID) {
-      throw new Error('contractID is missing in the request body.');
+      throw new Error("contractID is missing in the request body.");
     }
 
     const googleCredentialsBase64 =
       process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
     if (!googleCredentialsBase64) {
-      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+      throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
     }
 
     const googleCredentialsJson = Buffer.from(
       googleCredentialsBase64,
-      'base64'
-    ).toString('utf-8');
+      "base64"
+    ).toString("utf-8");
     const credentials = JSON.parse(googleCredentialsJson);
 
-    console.log('GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use');
+    console.log(
+      "GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use"
+    );
 
     const auth = new google.auth.GoogleAuth({
       credentials,
-      scopes: 'https://www.googleapis.com/auth/spreadsheets',
+      scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
 
     const client = await auth.getClient();
-    console.log('Authenticated with Google Sheets API');
+    console.log("Authenticated with Google Sheets API");
 
-    const sheets = google.sheets({ version: 'v4', auth: client });
+    const sheets = google.sheets({ version: "v4", auth: client });
 
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-    console.log('Spreadsheet ID:', spreadsheetId);
-    console.log('Sheet Name:', sheetName);
+    console.log("Spreadsheet ID:", spreadsheetId);
+    console.log("Sheet Name:", sheetName);
 
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -79,36 +95,33 @@ export async function POST(req) {
     });
 
     const headerRow = headerResponse.data?.values?.[0];
-    console.log('Header Row:', headerRow);
+    console.log("Header Row:", headerRow);
 
     if (!headerRow || headerRow.length === 0) {
-      throw new Error('Header row not found in the spreadsheet.');
+      throw new Error("Header row not found in the spreadsheet.");
     }
 
-    const contractIDColumnIndex = headerRow.indexOf('contractID');
-    const paymentIdColumnIndex = headerRow.indexOf('payment_id');
-    const estadoDePagoColumnIndex = headerRow.indexOf('estadoDePago');
-    const fechaDePagoColumnIndex = headerRow.indexOf('fechaDePago');
-    const tipoDePagoColumnIndex = headerRow.indexOf('tipoDePago'); // Encontramos la columna tipoDePago
-    const statusColumnIndex = headerRow.indexOf('status'); // Encontramos la columna status
+    const contractIDColumnIndex = headerRow.indexOf("contractID");
+    const paymentIdColumnIndex = headerRow.indexOf("payment_id");
+    const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
+    const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
+    const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago"); // Todavía buscamos la columna por si existe
+    const statusColumnIndex = headerRow.indexOf("status"); // Encontramos la columna status
 
     if (contractIDColumnIndex === -1) {
-      throw new Error('contractID column not found in the header.');
+      throw new Error("contractID column not found in the header.");
     }
     if (paymentIdColumnIndex === -1) {
-      throw new Error('payment_id column not found in the header.');
+      throw new Error("payment_id column not found in the header.");
     }
     if (estadoDePagoColumnIndex === -1) {
-      throw new Error('estadoDePago column not found in the header.');
+      throw new Error("estadoDePago column not found in the header.");
     }
     if (fechaDePagoColumnIndex === -1) {
-      throw new Error('fechaDePago column not found in the header.');
-    }
-    if (tipoDePagoColumnIndex === -1) {
-      throw new Error('tipoDePago column not found in the header.'); // Verificamos que la columna exista
+      throw new Error("fechaDePago column not found in the header.");
     }
     if (statusColumnIndex === -1) {
-      throw new Error('status column not found in the header.'); // Verificamos que la columna status exista
+      throw new Error("status column not found in the header."); // Verificamos que la columna status exista
     }
 
     // Retrieve all rows to search for contractID
@@ -130,18 +143,22 @@ export async function POST(req) {
 
     if (rowIndex !== -1) {
       const updateValues = [
-        payment_id || '',
-        estadoDePago || '',
-        fechaDePago || '',
-        tipoDePago || '', // Agregamos el tipoDePago a los valores a actualizar
+        payment_id || "",
+        estadoDePago === "approved" ? "Pagado" : estadoDePago || "", // Traducimos 'approved' a 'Pagado'
+        fechaDePago ? new Date(fechaDePago).toISOString() : "", // Formateamos la fecha a UTC
       ];
-
       const columnLetters = [
         getColumnLetter(paymentIdColumnIndex + 1),
         getColumnLetter(estadoDePagoColumnIndex + 1),
         getColumnLetter(fechaDePagoColumnIndex + 1),
-        getColumnLetter(tipoDePagoColumnIndex + 1), // Agregamos la columna tipoDePago
       ];
+
+      // Si la columna tipoDePago existe, también la actualizamos
+      if (tipoDePagoColumnIndex !== -1) {
+        const tipoDePagoExtraido = externalReference.split("-")[1] || ""; // Intentamos extraer la parte que antes era tipoDePago
+        updateValues.push(tipoDePagoExtraido);
+        columnLetters.push(getColumnLetter(tipoDePagoColumnIndex + 1));
+      }
 
       // Update the specific columns
       await Promise.all(
@@ -149,7 +166,7 @@ export async function POST(req) {
           sheets.spreadsheets.values.update({
             spreadsheetId,
             range: `${sheetName}!${columnLetter}${rowIndex}`,
-            valueInputOption: 'RAW',
+            valueInputOption: "RAW",
             requestBody: {
               values: [[updateValues[index]]], // Ensure the value is an array within an array
             },
@@ -157,23 +174,27 @@ export async function POST(req) {
         )
       );
 
-      // Update the 'status' column to 'Contrato' if the payment is successful
-      if (estadoDePago && estadoDePago.toLowerCase() === 'success') {
+      // Update the 'status' column to 'Contrato' if the payment is approved
+      if (estadoDePago && estadoDePago.toLowerCase() === "approved") {
         const statusColumnLetter = getColumnLetter(statusColumnIndex + 1);
         await sheets.spreadsheets.values.update({
           spreadsheetId,
           range: `${sheetName}!${statusColumnLetter}${rowIndex}`,
-          valueInputOption: 'RAW',
+          valueInputOption: "RAW",
           requestBody: {
-            values: [['Contrato']],
+            values: [["Contrato"]],
           },
         });
-        console.log(`Status updated to 'Contrato' for contractID: ${contractID} in row ${rowIndex}`);
+        console.log(
+          `Status updated to 'Contrato' for contractID: ${contractID} in row ${rowIndex}`
+        );
       }
 
-      console.log(`Payment details updated for contractID: ${contractID} in row ${rowIndex}`);
+      console.log(
+        `Payment details updated for contractID: ${contractID} in row ${rowIndex}`
+      );
       return new NextResponse(
-        JSON.stringify({ message: 'Payment details updated successfully.' }),
+        JSON.stringify({ message: "Payment details updated successfully." }),
         {
           status: 200,
           headers: headers,
@@ -182,7 +203,7 @@ export async function POST(req) {
     } else {
       console.log(`contractID: ${contractID} not found in the spreadsheet.`);
       return new NextResponse(
-        JSON.stringify({ error: 'ContractID not found in the spreadsheet.' }),
+        JSON.stringify({ error: "ContractID not found in the spreadsheet." }),
         {
           status: 404,
           headers: headers,
@@ -190,7 +211,7 @@ export async function POST(req) {
       );
     }
   } catch (error) {
-    console.error('POST Error (Update Payment Status):', error);
+    console.error("POST Error (Update Payment Status):", error);
     return new NextResponse(
       JSON.stringify({ error: error.message, stack: error.stack }),
       {
@@ -203,7 +224,7 @@ export async function POST(req) {
 
 // Function to convert column number to letter
 function getColumnLetter(columnNumber) {
-  let columnLetter = '';
+  let columnLetter = "";
   let temp = columnNumber;
   while (temp > 0) {
     const remainder = (temp - 1) % 26;
