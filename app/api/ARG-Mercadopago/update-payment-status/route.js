@@ -43,8 +43,22 @@ export async function POST(req) {
 
     console.log("contractID recibido:", contractID);
 
-    // Si necesitas extraer el tipoDePago de alguna manera, podrías hacerlo aquí
-    // Por ejemplo, si sigue un patrón específico dentro del contractID (que ahora contiene el external_reference)
+    let tipoDePagoExtraido = null;
+    if (contractID) {
+      const parts = contractID.split("_");
+      // Si hay tres partes o más, asumimos que la última es tipoDePago
+      if (parts.length >= 3) {
+        tipoDePagoExtraido = parts[parts.length - 1];
+      } else if (parts.length === 2) {
+        // Si hay dos partes, podría ser contractID_tipoDePago (si MemberstackID no está)
+        // Tendríamos que ver si la segunda parte no empieza con 'mem_' para distinguirlo
+        if (!parts[1]?.startsWith("mem_")) {
+          tipoDePagoExtraido = parts[1];
+        }
+      }
+    }
+
+    console.log("tipoDePagoExtraido:", tipoDePagoExtraido);
 
     console.log("Datos de pago recibidos (Server-Side):", paymentData);
 
@@ -52,7 +66,6 @@ export async function POST(req) {
       throw new Error("contractID is missing in the request body.");
     }
 
-    // ... el resto de tu código para autenticar con Google Sheets y actualizar la hoja de cálculo ...
     const googleCredentialsBase64 =
       process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
@@ -137,34 +150,39 @@ export async function POST(req) {
       }
     }
 
-    if (rowIndex !== -1) {
+    if (rowIndex !== -1 && tipoDePagoColumnIndex !== -1) {
       const updateValues = [
         payment_id || "",
         estadoDePago === "approved" ? "Pagado" : estadoDePago || "", // Traducimos 'approved' a 'Pagado'
         fechaDePago ? new Date(fechaDePago).toISOString() : "", // Formateamos la fecha a UTC
+        tipoDePagoExtraido || "", // Usamos el tipoDePagoExtraido
       ];
       const columnLetters = [
         getColumnLetter(paymentIdColumnIndex + 1),
         getColumnLetter(estadoDePagoColumnIndex + 1),
         getColumnLetter(fechaDePagoColumnIndex + 1),
+        getColumnLetter(tipoDePagoColumnIndex + 1),
       ];
 
-      // Si la columna tipoDePago existe, también la actualizamos
-      if (tipoDePagoColumnIndex !== -1) {
-        const tipoDePagoExtraido = contractID?.split("_")[2] || ""; // Intentamos extraer la parte que ahora es tipoDePago del contractID
-        updateValues.push(tipoDePagoExtraido);
-        columnLetters.push(getColumnLetter(tipoDePagoColumnIndex + 1));
-      }
+      // Filter out undefined or null values and corresponding column letters
+      const validUpdateValues = [];
+      const validColumnLetters = [];
+      updateValues.forEach((value, index) => {
+        if (value !== undefined) {
+          validUpdateValues.push(value);
+          validColumnLetters.push(columnLetters[index]);
+        }
+      });
 
       // Update the specific columns
       await Promise.all(
-        columnLetters.map((columnLetter, index) =>
+        validColumnLetters.map((columnLetter, index) =>
           sheets.spreadsheets.values.update({
             spreadsheetId,
             range: `${sheetName}!${columnLetter}${rowIndex}`,
             valueInputOption: "RAW",
             requestBody: {
-              values: [[updateValues[index]]], // Ensure the value is an array within an array
+              values: [[validUpdateValues[index]]], // Ensure the value is an array within an array
             },
           })
         )
@@ -191,6 +209,60 @@ export async function POST(req) {
       );
       return new NextResponse(
         JSON.stringify({ message: "Payment details updated successfully." }),
+        {
+          status: 200,
+          headers: headers,
+        }
+      );
+    } else if (rowIndex !== -1) {
+      // Si no se encontró la columna tipoDePago, actualizamos los otros campos
+      const updateValues = [
+        payment_id || "",
+        estadoDePago === "approved" ? "Pagado" : estadoDePago || "", // Traducimos 'approved' a 'Pagado'
+        fechaDePago ? new Date(fechaDePago).toISOString() : "", // Formateamos la fecha a UTC
+      ];
+      const columnLetters = [
+        getColumnLetter(paymentIdColumnIndex + 1),
+        getColumnLetter(estadoDePagoColumnIndex + 1),
+        getColumnLetter(fechaDePagoColumnIndex + 1),
+      ];
+
+      await Promise.all(
+        columnLetters.map((columnLetter, index) =>
+          sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `${sheetName}!${columnLetter}${rowIndex}`,
+            valueInputOption: "RAW",
+            requestBody: {
+              values: [[updateValues[index]]], // Ensure the value is an array within an array
+            },
+          })
+        )
+      );
+
+      if (estadoDePago && estadoDePago.toLowerCase() === "approved") {
+        const statusColumnLetter = getColumnLetter(statusColumnIndex + 1);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetName}!${statusColumnLetter}${rowIndex}`,
+          valueInputOption: "RAW",
+          requestBody: {
+            values: [["Contrato"]],
+          },
+        });
+        console.log(
+          `Status updated to 'Contrato' for contractID: ${contractID} in row ${rowIndex}`
+        );
+      }
+
+      console.log(
+        `Payment details updated for contractID: ${contractID} in row ${rowIndex}`
+      );
+      return new NextResponse(
+        JSON.stringify({
+          message:
+            "Payment details updated successfully (tipoDePago might be missing).",
+        }),
         {
           status: 200,
           headers: headers,

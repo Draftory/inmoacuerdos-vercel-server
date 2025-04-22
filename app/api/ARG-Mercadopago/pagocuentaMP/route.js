@@ -51,7 +51,7 @@ export async function POST(req) {
     let tipoDePago = null;
 
     if (Contrato === "Locación de vivienda") {
-      adjustedTitle = "InmoAcuerdos - Contrato de locaciÃ³n de vivienda";
+      adjustedTitle = "InmoAcuerdos - Contrato de locación de vivienda";
       adjustedPrice = 4999;
       tipoDePago = "Contrato Individual";
     }
