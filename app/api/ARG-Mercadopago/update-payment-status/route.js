@@ -35,19 +35,17 @@ export async function POST(req) {
 
   try {
     const paymentData = await req.json();
+    // Incluimos external_reference en la desestructuración
     const { payment_id, estadoDePago, fechaDePago, external_reference } =
       paymentData;
-    const contractID = external_reference;
 
-    // Extraemos el external_reference para obtener el contractID completo
-    const externalReference = paymentData.external_reference;
+    // Asignamos el external_reference completo a contractID
+    const contractID = external_reference;
     console.log(
       "external_reference asociado al pago",
       payment_id + ":",
-      externalReference
+      external_reference
     );
-
-    const contractID = externalReference; // Usamos el external_reference completo como contractID
     console.log("contractID extraído:", contractID);
 
     // Si necesitas extraer el tipoDePago de alguna manera, podrías hacerlo aquí
