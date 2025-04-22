@@ -46,18 +46,10 @@ export async function POST(request) {
             }`
           );
 
-          const parts = externalReference.split("-");
-          // El contractID debería ser la parte antes del último "-Contrato Individual"
-          const contractId = parts.slice(0, -1).join("-");
-
-          let memberstackId;
-          let tipoDePago;
-
-          // Intenta extraer MemberstackID (si sigue un patrón)
-          memberstackId = parts.find((part) => part.startsWith("mem_")) || null;
-
-          // Intenta extraer tipoDePago (siempre es la segunda parte)
-          tipoDePago = parts[1] || null;
+          const parts = externalReference.split("_");
+          const contractId = parts[0] || null;
+          const memberstackId = parts[1] || null;
+          const tipoDePago = parts[2]?.replace(/_/g, " ") || null;
 
           console.log(`contractID extraído: ${contractId}`);
           console.log(`MemberstackID extraído: ${memberstackId}`);
