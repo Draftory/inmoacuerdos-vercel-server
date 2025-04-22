@@ -35,7 +35,9 @@ export async function POST(req) {
 
   try {
     const paymentData = await req.json();
-    const { payment_id, estadoDePago, fechaDePago } = paymentData; // Quitamos contractID y tipoDePago de aquí
+    const { payment_id, estadoDePago, fechaDePago, external_reference } =
+      paymentData;
+    const contractID = external_reference;
 
     // Extraemos el external_reference para obtener el contractID completo
     const externalReference = paymentData.external_reference;
