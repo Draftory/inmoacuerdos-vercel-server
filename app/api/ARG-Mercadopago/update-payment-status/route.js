@@ -38,19 +38,13 @@ export async function POST(req) {
     const paymentData = await req.json();
     console.log("Request Body:", paymentData); // Usar la variable paymentData
 
-    // Incluimos external_reference en la desestructuración
-    const { payment_id, estadoDePago, fechaDePago } = paymentData;
-    // Asignamos el external_reference completo a contractID
-    const contractID = paymentData.external_reference; // Acceder a external_reference desde paymentData
-    console.log(
-      "external_reference asociado al pago",
-      payment_id + ":",
-      paymentData.external_reference // Acceder a external_reference desde paymentData
-    );
-    console.log("contractID extraído:", contractID);
+    // Desestructuramos los datos que necesitamos
+    const { payment_id, estadoDePago, fechaDePago, contractID } = paymentData; // Incluimos contractID
+
+    console.log("contractID recibido:", contractID);
 
     // Si necesitas extraer el tipoDePago de alguna manera, podrías hacerlo aquí
-    // Por ejemplo, si sigue un patrón específico dentro del externalReference
+    // Por ejemplo, si sigue un patrón específico dentro del contractID (que ahora contiene el external_reference)
 
     console.log("Datos de pago recibidos (Server-Side):", paymentData);
 
@@ -58,6 +52,7 @@ export async function POST(req) {
       throw new Error("contractID is missing in the request body.");
     }
 
+    // ... el resto de tu código para autenticar con Google Sheets y actualizar la hoja de cálculo ...
     const googleCredentialsBase64 =
       process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
@@ -156,8 +151,7 @@ export async function POST(req) {
 
       // Si la columna tipoDePago existe, también la actualizamos
       if (tipoDePagoColumnIndex !== -1) {
-        const tipoDePagoExtraido =
-          paymentData.external_reference?.split("_")[2] || ""; // Intentamos extraer la parte que ahora es tipoDePago
+        const tipoDePagoExtraido = contractID?.split("_")[2] || ""; // Intentamos extraer la parte que ahora es tipoDePago del contractID
         updateValues.push(tipoDePagoExtraido);
         columnLetters.push(getColumnLetter(tipoDePagoColumnIndex + 1));
       }
