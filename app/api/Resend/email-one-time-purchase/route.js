@@ -3,7 +3,8 @@ import { Resend } from "resend";
 import { NextResponse } from "next/server";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const fromEmail = "noresponder@inmoacuerdos.com"; // Define la dirección de envío aquí
+const senderName = "InmoAcuerdos"; // Define el nombre del remitente
+const fromEmail = `"${senderName}" <noresponder@inmoacuerdos.com>`; // Formato con nombre
 
 export async function POST(req) {
   try {
@@ -120,7 +121,7 @@ export async function POST(req) {
     `;
 
     const data = await resend.emails.send({
-      from: fromEmail,
+      from: fromEmail, // Usamos la variable con el nombre del remitente
       to: to,
       subject: subject,
       html: emailHtml,
