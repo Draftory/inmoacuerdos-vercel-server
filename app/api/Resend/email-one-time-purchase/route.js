@@ -7,11 +7,14 @@ const fromEmail = "noresponder@inmoacuerdos.com"; // Define la dirección de env
 
 export async function POST(req) {
   try {
-    const { to, subject, nombre, linkPDF, linkDOC } = await req.json();
+    const { to, subject, name, linkPDF, linkDOC } = await req.json();
 
-    if (!to || !subject || !nombre || !linkPDF || !linkDOC) {
+    if (!to || !subject || !linkPDF || !linkDOC) {
       return NextResponse.json(
-        { error: "Faltan parámetros: to, subject, nombre, linkPDF o linkDOC." },
+        {
+          error:
+            "Faltan parámetros obligatorios: to, subject, linkPDF o linkDOC.",
+        },
         { status: 400 }
       );
     }
@@ -41,6 +44,10 @@ export async function POST(req) {
             text-align: center;
             padding-bottom: 20px;
             border-bottom: 1px solid #e0e0e0;
+          }
+          .header a { /* Estilos para el enlace del logo */
+            text-decoration: none;
+            display: inline-block; /* Para que el bloque ocupe el espacio de la imagen */
           }
           .header img {
             max-height: 60px;
@@ -83,11 +90,13 @@ export async function POST(req) {
       <body>
         <div class="container">
           <div class="header">
-            <img src="https://ms-application-assets.s3.amazonaws.com/images/app_clk8u8rs900690tjx3j00e86h/675059-logo.png" alt="InmoAcuerdos Logo">
+            <a href="https://inmoacuerdos.com" target="_blank" rel="noopener noreferrer">
+              <img src="https://ms-application-assets.s3.amazonaws.com/images/app_clk8u8rs900690tjx3j00e86h/675059-logo.png" alt="InmoAcuerdos Logo">
+            </a>
             <h1>¡Gracias por usar InmoAcuerdos!</h1>
           </div>
           <div class="content">
-            <p>Hola ${nombre},</p>
+            <p>Hola ${name ? name : "Estimado/a usuario"},</p>
             <p>Hemos generado tu contrato de locación de vivienda con éxito. Podés descargarlo en los siguientes formatos:</p>
 
             <a href="${linkPDF}" class="btn">📄 Descargar en PDF</a>
