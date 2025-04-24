@@ -87,11 +87,11 @@ export async function POST(req) {
             <h1>¡Gracias por usar InmoAcuerdos!</h1>
           </div>
           <div class="content">
-            <p>Hola {{nombre}},</p>
+            <p>Hola ${nombre},</p>
             <p>Hemos generado tu contrato de locación de vivienda con éxito. Podés descargarlo en los siguientes formatos:</p>
 
-            <a href="{{linkPDF}}" class="btn">📄 Descargar en PDF</a>
-            <a href="{{linkDOC}}" class="btn">📝 Descargar en Word</a>
+            <a href="${linkPDF}" class="btn">📄 Descargar en PDF</a>
+            <a href="${linkDOC}" class="btn">📝 Descargar en Word</a>
 
             <p>Recordá revisar el contrato antes de firmarlo.</p>
 
@@ -111,7 +111,7 @@ export async function POST(req) {
     `;
 
     const data = await resend.emails.send({
-      from: fromEmail, // Usamos la variable definida arriba
+      from: fromEmail,
       to: to,
       subject: subject,
       html: emailHtml,
