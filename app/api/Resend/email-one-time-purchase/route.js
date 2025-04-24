@@ -1,21 +1,21 @@
-// app/api/enviar-contrato/route.js (o el nombre de tu archivo)
-import { Resend } from 'resend';
-import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+// app/api/test-email/route.js
+import { Resend } from "resend";
+import { NextResponse } from "next/server";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const fromEmail = 'noresponder@inmoacuerdos.com';
-const drive = google.drive({ version: 'v3', auth: /* tu autenticación de Google Drive */ });
+const fromEmail = "noresponder@inmoacuerdos.com"; // Define la dirección de envío aquí
 
 export async function POST(req) {
   try {
-    const { email, nombre, linkPDF, linkDOC, contratoId } = await req.json(); // Recibimos los links ahora
+    const { to, subject, nombre, linkPDF, linkDOC } = await req.json();
 
-    if (!email || !nombre || !linkPDF || !linkDOC) {
-      return NextResponse.json({ error: 'Faltan datos en la solicitud: email, nombre, linkPDF o linkDOC.' }, { status: 400 });
+    if (!to || !subject || !nombre || !linkPDF || !linkDOC) {
+      return NextResponse.json(
+        { error: "Faltan parámetros: to, subject, nombre, linkPDF o linkDOC." },
+        { status: 400 }
+      );
     }
 
-    // Construye el cuerpo del correo electrónico con la plantilla HTML
     const emailHtml = `
       <!DOCTYPE html>
       <html>
@@ -87,11 +87,11 @@ export async function POST(req) {
             <h1>¡Gracias por usar InmoAcuerdos!</h1>
           </div>
           <div class="content">
-            <p>Hola ${nombre},</p>
+            <p>Hola {{nombre}},</p>
             <p>Hemos generado tu contrato de locación de vivienda con éxito. Podés descargarlo en los siguientes formatos:</p>
 
-            <a href="${linkPDF}" class="btn">📄 Descargar en PDF</a>
-            <a href="${linkDOC}" class="btn">📝 Descargar en Word</a>
+            <a href="{{linkPDF}}" class="btn">📄 Descargar en PDF</a>
+            <a href="{{linkDOC}}" class="btn">📝 Descargar en Word</a>
 
             <p>Recordá revisar el contrato antes de firmarlo.</p>
 
@@ -110,20 +110,34 @@ export async function POST(req) {
       </html>
     `;
 
-    try {
-      const data = await resend.emails.send({
-        from: fromEmail,
-        to: email,
-        subject: 'Tu Contrato de Locación de Vivienda - InmoAcuerdos',
-        html: emailHtml, // Usamos el HTML construido
-      });
+    const data = await resend.emails.send({
+      from: fromEmail, // Usamos la variable definida arriba
+      to: to,
+      subject: subject,
+      html: emailHtml,
+    });
 
-      return NextResponse.json({ message: 'Correo electrónico enviado exitosamente!', data }, { status: 200 });
-    } catch (error) {
-      console.error('Error al enviar el correo electrónico:', error);
-      return NextResponse.json({ error: 'Error al enviar el correo electrónico con Resend.', details: error }, { status: 500 });
-    }
-  } else {
-    return NextResponse.json({ error: 'Método no permitido.' }, { status: 405 });
+    return NextResponse.json(
+      { message: "Correo electrónico enviado exitosamente!", data },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Error al enviar el correo electrónico:", error);
+    return NextResponse.json(
+      {
+        error: "Error al enviar el correo electrónico con Resend.",
+        details: error,
+      },
+      { status: 500 }
+    );
   }
+}
+
+export async function GET(req) {
+  return NextResponse.json(
+    {
+      message: "Este endpoint solo acepta solicitudes POST para enviar emails.",
+    },
+    { status: 405 }
+  );
 }
