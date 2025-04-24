@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { NextResponse } from "next/server";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const fromEmail = "noresponder@inmoacuerdos.com"; // Define la dirección de envío aquí
 
 export async function POST(req) {
   try {
@@ -16,7 +17,7 @@ export async function POST(req) {
     }
 
     const data = await resend.emails.send({
-      from: "tu_direccion_verificada@inmoacuerdos.com", // Reemplaza con tu dirección verificada en Resend
+      from: fromEmail, // Usamos la variable definida arriba
       to: to,
       subject: subject,
       html: `<p>${body}</p>`,
