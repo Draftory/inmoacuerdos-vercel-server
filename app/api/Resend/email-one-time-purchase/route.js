@@ -8,13 +8,14 @@ const fromEmail = `"${senderName}" <noresponder@inmoacuerdos.com>`; // Formato c
 
 export async function POST(req) {
   try {
-    const { to, subject, name, linkPDF, linkDOC } = await req.json();
+    const { to, subject, name, linkPDF, linkDOC, contractTypeDescription } =
+      await req.json();
 
-    if (!to || !subject || !linkPDF || !linkDOC) {
+    if (!to || !subject || !linkPDF || !linkDOC || !contractTypeDescription) {
       return NextResponse.json(
         {
           error:
-            "Faltan parámetros obligatorios: to, subject, linkPDF o linkDOC.",
+            "Faltan parámetros obligatorios: to, subject, linkPDF, linkDOC o contractTypeDescription.",
         },
         { status: 400 }
       );
@@ -25,7 +26,7 @@ export async function POST(req) {
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>Contrato de Locación</title>
+        <title>${contractTypeDescription}</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -98,7 +99,7 @@ export async function POST(req) {
           </div>
           <div class="content">
             <p>Hola ${name ? name : "Estimado/a usuario"},</p>
-            <p>Hemos generado tu contrato de locación de vivienda con éxito. Podés descargarlo en los siguientes formatos:</p>
+            <p>Hemos generado tu ${contractTypeDescription} con éxito. Podés descargarlo en los siguientes formatos:</p>
 
             <a href="${linkPDF}" class="btn">📄 Descargar en PDF</a>
             <a href="${linkDOC}" class="btn">📝 Descargar en Word</a>
@@ -121,7 +122,7 @@ export async function POST(req) {
     `;
 
     const data = await resend.emails.send({
-      from: fromEmail, // Usamos la variable con el nombre del remitente
+      from: fromEmail,
       to: to,
       subject: subject,
       html: emailHtml,
