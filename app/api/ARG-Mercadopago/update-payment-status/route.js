@@ -36,15 +36,14 @@ export async function POST(req) {
   try {
     // Leer el cuerpo de la solicitud una sola vez
     const paymentData = await req.json();
-    console.log("Request Body:", paymentData); // Usar la variable paymentData
+    console.log("Request Body:", paymentData);
 
-    // Desestructuramos los datos que necesitamos
+    // Desestructurar los datos necesarios
     const { payment_id, estadoDePago, fechaDePago, contractID, tipoDePago } =
-      paymentData; // Incluimos tipoDePago
+      paymentData;
 
     console.log("contractID recibido:", contractID);
     console.log("tipoDePago recibido:", tipoDePago);
-
     console.log("Datos de pago recibidos (Server-Side):", paymentData);
 
     if (!contractID) {
@@ -53,7 +52,6 @@ export async function POST(req) {
 
     const googleCredentialsBase64 =
       process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-
     if (!googleCredentialsBase64) {
       throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
     }
@@ -87,7 +85,6 @@ export async function POST(req) {
       spreadsheetId,
       range: `${sheetName}!1:1`,
     });
-
     const headerRow = headerResponse.data?.values?.[0];
     console.log("Header Row:", headerRow);
 
@@ -99,8 +96,8 @@ export async function POST(req) {
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago"); // Ya no necesitamos la lógica de extracción compleja
-    const statusColumnIndex = headerRow.indexOf("status"); // Encontramos la columna status
+    const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago");
+    const statusColumnIndex = headerRow.indexOf("status");
 
     if (contractIDColumnIndex === -1) {
       throw new Error("contractID column not found in the header.");
@@ -120,76 +117,56 @@ export async function POST(req) {
       );
     }
     if (statusColumnIndex === -1) {
-      throw new Error("status column not found in the header."); // Verificamos que la columna status exista
+      throw new Error("status column not found in the header.");
     }
 
-    // Retrieve all rows to search for contractID
+    // Retrieve all rows to find the row with matching contractID
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`, // Adjust the range to cover all potential columns
+      range: `${sheetName}!A:VM`, // Adjust the range to cover all columns
     });
-
     const allRows = allRowsResponse.data?.values || [];
 
-    // Find the row with the matching contractID
     let rowIndex = -1;
     for (let i = 1; i < allRows.length; i++) {
       if (allRows[i][contractIDColumnIndex] === contractID) {
-        rowIndex = i + 1; // +1 to account for header row and 1-based indexing
+        rowIndex = i + 1;
         break;
       }
     }
 
     if (rowIndex !== -1) {
-      const updateValues = [
-        payment_id || "",
-        estadoDePago === "approved" ? "Pagado" : estadoDePago || "", // Traducimos 'approved' a 'Pagado'
-        fechaDePago ? new Date(fechaDePago).toISOString() : "", // Formateamos la fecha a UTC
-      ];
-      const columnLetters = [
-        getColumnLetter(paymentIdColumnIndex + 1),
-        getColumnLetter(estadoDePagoColumnIndex + 1),
-        getColumnLetter(fechaDePagoColumnIndex + 1),
-      ];
+      // Prepare the updated row data
+      const updatedRow = allRows[rowIndex - 1] || []; // Get existing row or default to empty array
 
-      // Si la columna tipoDePago existe, también la actualizamos
+      updatedRow[paymentIdColumnIndex] =
+        payment_id || updatedRow[paymentIdColumnIndex] || "";
+      updatedRow[estadoDePagoColumnIndex] =
+        estadoDePago === "approved"
+          ? "Pagado"
+          : estadoDePago || updatedRow[estadoDePagoColumnIndex] || "";
+      updatedRow[fechaDePagoColumnIndex] = fechaDePago
+        ? new Date(fechaDePago).toISOString()
+        : updatedRow[fechaDePagoColumnIndex] || "";
       if (tipoDePagoColumnIndex !== -1 && tipoDePago !== undefined) {
-        updateValues.push(tipoDePago);
-        columnLetters.push(getColumnLetter(tipoDePagoColumnIndex + 1));
+        updatedRow[tipoDePagoColumnIndex] = tipoDePago;
       }
-
-      // Update the specific columns
-      await Promise.all(
-        columnLetters.map((columnLetter, index) =>
-          sheets.spreadsheets.values.update({
-            spreadsheetId,
-            range: `${sheetName}!${columnLetter}${rowIndex}`,
-            valueInputOption: "RAW",
-            requestBody: {
-              values: [[updateValues[index]]], // Ensure the value is an array within an array
-            },
-          })
-        )
-      );
-
-      // Update the 'status' column to 'Contrato' if the payment is approved
       if (estadoDePago && estadoDePago.toLowerCase() === "approved") {
-        const statusColumnLetter = getColumnLetter(statusColumnIndex + 1);
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!${statusColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [["Contrato"]],
-          },
-        });
-        console.log(
-          `Status updated to 'Contrato' for contractID: ${contractID} in row ${rowIndex}`
-        );
+        updatedRow[statusColumnIndex] = "Contrato";
       }
+      const lastColumnLetter = getColumnLetter(updatedRow.length); //dynamically calculate the last column
 
+      // Update the entire row in one API call
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [updatedRow],
+        },
+      });
       console.log(
-        `Payment details updated for contractID: ${contractID} in row ${rowIndex}`
+        `Payment details updated for contractID: ${contractID} in row ${rowIndex}.`
       );
       return new NextResponse(
         JSON.stringify({ message: "Payment details updated successfully." }),
