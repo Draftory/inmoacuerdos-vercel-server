@@ -2,18 +2,18 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import Airtable from 'airtable';
 
-/* Variables de entorno para Google  */
+// Variables de entorno para Google
 const GOOGLE_APPLICATION_CREDENTIALS_SECRET = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 const TEMPLATE_ID = process.env.ARG_LOCACION_DE_VIVIENDA_TEMPLATE_ID;
 const DESTINATION_FOLDER_ID = process.env.GOOGLE_DRIVE_DESTINATION_FOLDER_ID;
 
-/* Variables de entorno para Airtable */
+// Variables de entorno para Airtable
 const AIRTABLE_PERSONAL_ACCESS_TOKEN = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
 const AIRTABLE_BASE_ID_CONTRACT_DATABASE = process.env.AIRTABLE_BASE_ID_CONTRACT_DATABASE;
 const AIRTABLE_CONTRACTS_TABLE_NAME = 'Contratos';
 const AIRTABLE_STORAGE_TABLE_NAME = 'Documentos';
 
-/* Variables de entorno para Webflow */
+// Variables de entorno para Webflow
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const WEBFLOW_USER_COLLECTION_ID = process.env.WEBFLOW_USER_COLLECTION_ID;
 
@@ -38,8 +38,8 @@ export async function OPTIONS(req) {
   });
 }
 
-/* Función para obtener los datos del registro desde Airtable */
-async function getRowDataFromAirtable(recordId: string) {
+// Función para obtener los datos del registro desde Airtable
+async function getRowDataFromAirtable(recordId) { // Eliminé ": string"
   const base = new Airtable({ apiKey: AIRTABLE_PERSONAL_ACCESS_TOKEN }).base(AIRTABLE_BASE_ID_CONTRACT_DATABASE);
   try {
     const record = await base(AIRTABLE_CONTRACTS_TABLE_NAME).find(recordId);
@@ -53,7 +53,7 @@ async function getRowDataFromAirtable(recordId: string) {
   }
 }
 
-/* Función para obtener las cláusulas desde Airtable */
+// Función para obtener las cláusulas desde Airtable
 async function fetchClausesFromAirtable() {
   const Airtable = require('airtable');
   const airtablePersonalAccessToken = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
@@ -88,6 +88,7 @@ async function generateDocuments(rowData: any, auth: any) {
   const drive = google.drive({ version: 'v3', auth });
 
   try {
+    // Fetch clauses from Airtable
     const clauses = await fetchClausesFromAirtable();
     const placeholders: { [key: string]: string } = {};
     const headers = Object.keys(rowData.fields);
@@ -100,6 +101,7 @@ async function generateDocuments(rowData: any, auth: any) {
       }
     }
 
+    // Copia el template
     const copyResponse = await drive.files.copy({
       fileId: TEMPLATE_ID,
       requestBody: {
@@ -111,6 +113,7 @@ async function generateDocuments(rowData: any, auth: any) {
       throw new Error('Failed to copy the template document.');
     }
 
+    // Abre el documento
     const document = await docs.documents.get({ documentId: docId });
     const body = document.data.body;
     if (!body) {
@@ -118,6 +121,7 @@ async function generateDocuments(rowData: any, auth: any) {
     }
     let content = body.content || [];
 
+    // Función para reemplazar el texto y manejar imágenes
     const replaceContent = async (content: any[]) => {
       for (let element of content) {
         if (element.paragraph) {
@@ -219,6 +223,7 @@ async function generateDocuments(rowData: any, auth: any) {
     };
     await replaceContent(content);
 
+    // Update the document
     await docs.documents.patch({
       documentId: docId,
       requestBody: {
@@ -234,6 +239,7 @@ async function generateDocuments(rowData: any, auth: any) {
       },
     });
 
+    // Rename the document
     const newName = `Contrato de Alquiler ${rowData.fields.nombreLocadorPF1 || 'Desconocido'} - ${rowData.fields.nombreLocatarioPF1 || 'Desconocido'}`;
     await drive.files.update({
       fileId: docId,
@@ -242,12 +248,14 @@ async function generateDocuments(rowData: any, auth: any) {
       },
     });
 
+    // Convert to PDF
     const pdfResponse = await drive.files.export({
       fileId: docId,
       mimeType: 'application/pdf',
     });
     const pdfFileName = `${newName}.pdf`;
 
+    // Upload PDF to Drive
     const pdfFileMetadata = {
       name: pdfFileName,
       parents: [DESTINATION_FOLDER_ID],
@@ -283,10 +291,11 @@ async function generateDocuments(rowData: any, auth: any) {
   }
 }
 
-/* Función para actualizar los links en Airtable y almacenar los archivos */
+// Función para actualizar los links en Airtable y almacenar los archivos
 async function updateAirtableWithLinksAndFiles(recordId: string, docDownloadUrl: string, pdfDownloadUrl: string, pdfDocUrl: string) {
   const base = new Airtable({ apiKey: AIRTABLE_PERSONAL_ACCESS_TOKEN }).base(AIRTABLE_BASE_ID_CONTRACT_DATABASE);
   try {
+    // Subir archivos a Airtable
     const docFile = {
       url: docDownloadUrl,
       filename: 'Contrato.docx'
@@ -295,7 +304,7 @@ async function updateAirtableWithLinksAndFiles(recordId: string, docDownloadUrl:
       url: pdfDownloadUrl,
       filename: 'Contrato.pdf'
     };
-    const pdfDocFile = {
+     const pdfDocFile = {
       url: pdfDocUrl,
       filename: 'Contrato.pdf'
     };
@@ -316,7 +325,7 @@ async function updateAirtableWithLinksAndFiles(recordId: string, docDownloadUrl:
   }
 }
 
-/* Función para enviar el email usando Resend */
+// Función para enviar el email usando Resend
 async function sendEmailWithResend(emailMember: string, emailGuest: string, nombreCliente: string, pdfDownloadUrl: string, docDownloadUrl: string) {
   const Resend = require('resend');
   const resend = new Resend(process.env.RESEND_API_KEY);
@@ -348,7 +357,7 @@ async function sendEmailWithResend(emailMember: string, emailGuest: string, nomb
   await sendEmail(emailGuest);
 }
 
-/* Función para decrementar los tokens del usuario en Memberstack */
+// Función para decrementar los tokens del usuario en Memberstack
 async function decrementMemberstackTokens(memberstackId: string) {
   const vercelUpdateMetadataUrl = `${process.env.VERCEL_URL}/api/memberstack/updateMemberMetadata`;
 
@@ -382,7 +391,7 @@ async function decrementMemberstackTokens(memberstackId: string) {
   }
 }
 
-/* Función para obtener la información del miembro de Memberstack */
+// Función para obtener la información del miembro de Memberstack
 async function getMemberstackMemberData(memberstackId: string) {
   const vercelGetMetadataUrl = `${process.env.VERCEL_URL}/api/memberstack/getMemberMetadata?memberId=${memberstackId}`;
   try {
@@ -405,7 +414,7 @@ async function getMemberstackMemberData(memberstackId: string) {
   }
 }
 
-/* Función para remover al usuario del plan en Memberstack */
+// Función para remover al usuario del plan en Memberstack
 async function removeMemberFromPlanInMemberstack(memberstackId: string, planId: string) {
   const vercelRemoveFromPlanUrl = `${process.env.VERCEL_URL}/api/memberstack/removeMemberFromPlan`;
 
@@ -435,7 +444,7 @@ async function removeMemberFromPlanInMemberstack(memberstackId: string, planId: 
   }
 }
 
-/* Función para crear un item en Webflow */
+// Función para crear un item en Webflow
 async function createWebflowItem(collectionId: string, itemData: any) {
   const url = `https://api.webflow.com/collections/${collectionId}/items`;
   try {
@@ -481,6 +490,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    // 1. Autenticación
     const credentials = JSON.parse(Buffer.from(GOOGLE_APPLICATION_CREDENTIALS_SECRET, 'base64').toString('utf-8'));
     const auth = new google.auth.GoogleAuth({
       credentials,
@@ -489,19 +499,22 @@ export default async function handler(req: any, res: any) {
     const authClient = await auth.getClient();
 
 
+    // 2. Obtener los datos del registro de Airtable
     const rowData = await getRowDataFromAirtable(recordId);
 
+    // 3. Generar los documentos
     const { pdfDownloadUrl, docDownloadUrl, pdfDocUrl } = await generateDocuments(rowData, authClient);
 
+    // 4. Actualizar Airtable con los links y almacenar los archivos
     await updateAirtableWithLinksAndFiles(recordId, docDownloadUrl, pdfDownloadUrl, pdfDocUrl);
 
-    /* --- Envío de Correo --- */
+    // --- Envío de Correo ---
     const emailMember = rowData.fields.emailMember;
     const emailGuest = rowData.fields.emailGuest;
     const nombreCliente = rowData.fields.nombreLocatarioPF1;
     await sendEmailWithResend(emailMember, emailGuest, nombreCliente, pdfDownloadUrl, docDownloadUrl);
 
-    /* --- Creación de item en Webflow --- */
+    // --- Creación de item en Webflow ---
     try {
 
       const nombreLocador = rowData.fields.nombreLocadorPF1 || "No Disponible";
