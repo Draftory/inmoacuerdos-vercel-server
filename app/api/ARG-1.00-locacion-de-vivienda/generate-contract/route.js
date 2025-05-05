@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import Airtable from "airtable";
 import * as fs from "fs/promises";
 import path from "path";
 import mammoth from "mammoth";
@@ -9,108 +10,124 @@ const TEMPLATE_PATH = path.join(
   "Templates",
   "1.00 - Contrato de Locación de Vivienda - Template.docx"
 );
-const CLAUSES_API_URL =
-  "https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-get-clauses";
 
-async function fetchClauses() {
+export async function POST(request) {
+  console.log("Starting API request to Airtable for contract data");
+
+  // Initialize headers
+  const headers = {
+    "Access-Control-Allow-Methods": "POST",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+
   try {
-    console.log(
-      "[/api/process-template] - Intentando obtener las cláusulas desde la API:",
-      CLAUSES_API_URL
-    );
-    const response = await fetch(CLAUSES_API_URL);
-    if (!response.ok) {
-      console.error(
-        `[/api/process-template] - Error al obtener las cláusulas: ${response.status} - ${await response.text()}`
-      );
-      return null;
-    }
-    const clausesData = await response.json();
-    console.log(
-      "[/api/process-template] - Cláusulas obtenidas exitosamente:",
-      clausesData
-    );
+    const requestBody = await request.json();
+    console.log("Request Body:", requestBody);
+    const { recordId } = requestBody;
 
-    const clauses = clausesData.values.map((row) => ({
+    if (!recordId) {
+      console.error("Error: recordId is missing in the request body");
+      return NextResponse.json(
+        { error: "recordId is required in the request body" },
+        { status: 400, headers }
+      );
+    }
+
+    // Retrieve Airtable credentials for contract data
+    const airtablePersonalAccessToken =
+      process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
+    const airtableBaseId = process.env.AIRTABLE_BASE_ID_CONTRACT_DATABASE;
+    const airtableTableName =
+      process.env.AIRTABLE_CONTRACTS_TABLE_NAME || "Contratos"; // Default table name
+
+    if (!airtablePersonalAccessToken) {
+      throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
+    }
+    if (!airtableBaseId) {
+      throw new Error("AIRTABLE_BASE_ID_CONTRACT_DATABASE is not set");
+    }
+
+    const base = new Airtable({ apiKey: airtablePersonalAccessToken }).base(
+      airtableBaseId
+    );
+    console.log("Airtable client for contract data initialized");
+
+    // Fetch contract data from Airtable
+    const record = await base(airtableTableName).find(recordId);
+
+    if (!record || !record.fields) {
+      console.error(
+        `Error fetching record ${recordId} from Airtable: Record not found or fields are empty`
+      );
+      return NextResponse.json(
+        { error: `Record with ID ${recordId} not found in Airtable` },
+        { status: 404, headers }
+      );
+    }
+
+    const contractData = record.fields;
+    console.log("Contract data fetched from Airtable:", contractData);
+
+    // Fetch clauses from the other Airtable base (using your existing fetchClauses logic)
+    async function fetchClauses() {
+      try {
+        const airtableBaseIdClauses = process.env.AIRTABLE_BASE_ID_CLAUSES;
+        const airtableTableNameClauses =
+          process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
+
+        if (!airtableBaseIdClauses) {
+          throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
+        }
+
+        const baseClauses = new Airtable({
+          apiKey: airtablePersonalAccessToken,
+        }).base(airtableBaseIdClauses);
+        console.log("Airtable client for clauses initialized");
+
+        const records = [];
+        await baseClauses(airtableTableNameClauses)
+          .select()
+          .eachPage((partialRecords, fetchNextPage) => {
+            records.push(...partialRecords);
+            fetchNextPage();
+          });
+
+        const values = records.map((r) => Object.values(r.fields));
+        return { values };
+      } catch (error) {
+        console.error("Error fetching clauses from Airtable:", error);
+        return { values: [] };
+      }
+    }
+
+    const clausesResponse = await fetchClauses();
+    const clauses = clausesResponse.values.map((row) => ({
       placeholder: `{{${row[0]}}}`,
       value: row[1],
       clauseText: row[2],
     }));
-
-    return clauses;
-  } catch (error) {
-    console.error(
-      "[/api/process-template] - Error al obtener las cláusulas:",
-      error
-    );
-    return [];
-  }
-}
-
-export async function POST(request) {
-  console.log("[/api/process-template] - Recibida una solicitud POST");
-  try {
-    const requestBody = await request.json();
-    console.log(
-      "[/api/process-template] - Cuerpo de la solicitud:",
-      requestBody
-    );
-    const { placeholders: mainPlaceholders } = requestBody;
-
-    if (!mainPlaceholders || typeof mainPlaceholders !== "object") {
-      console.error(
-        '[/api/process-template] - Error: Objeto "placeholders" principal inválido o faltante.'
-      );
-      return NextResponse.json(
-        {
-          error:
-            'Se requiere un objeto "placeholders" en el cuerpo de la solicitud.',
-        },
-        { status: 400 }
-      );
-    }
-
-    console.log(
-      "[/api/process-template] - Placeholders principales recibidos:",
-      mainPlaceholders
-    );
-
-    const clauses = await fetchClauses();
-    if (!clauses || clauses.length === 0) {
-      return NextResponse.json(
-        {
-          error: "No se pudieron obtener las cláusulas o la lista está vacía.",
-        },
-        { status: 500 }
-      );
-    }
+    console.log("Fetched clauses:", clauses);
 
     try {
-      console.log(
-        "[/api/process-template] - Intentando leer el archivo de plantilla:",
-        TEMPLATE_PATH
-      );
+      console.log("Attempting to read the template file:", TEMPLATE_PATH);
       const templateBuffer = await fs.readFile(TEMPLATE_PATH);
-      console.log(
-        "[/api/process-template] - Archivo de plantilla leído exitosamente."
-      );
+      console.log("Template file read successfully.");
       const { value: templateHTML } = await mammoth.convertToHtml({
         buffer: templateBuffer,
       });
-      console.log(
-        "[/api/process-template] - Plantilla DOCX convertida a HTML."
-      );
+      console.log("DOCX template converted to HTML.");
       let processedHTML = templateHTML;
 
       console.log(
-        "[/api/process-template] - Contenido HTML inicial (antes de reemplazar):",
+        "Initial HTML content (before replacements):",
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Reemplazo condicional de placeholders con cláusulas ---
+      // --- Replace placeholders with matching clauses ---
       let clausesReplaced = 0;
       for (const clause of clauses) {
-        if (mainPlaceholders[clause.placeholder] === clause.value) {
+        const placeholderWithoutBraces = clause.placeholder.slice(2, -2);
+        if (contractData[placeholderWithoutBraces] === clause.value) {
           const regex = new RegExp(
             clause.placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
             "g"
@@ -122,18 +139,15 @@ export async function POST(request) {
           }
         }
       }
+      console.log("Clauses introduced:", clausesReplaced);
       console.log(
-        "[/api/process-template] - Cláusulas introducidas:",
-        clausesReplaced
-      );
-      console.log(
-        "[/api/process-template] - Contenido HTML después de introducir cláusulas:",
+        "HTML content after introducing clauses:",
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Reemplazo iterativo de todos los placeholders restantes ---
+      // --- Iteratively replace all remaining placeholders with contract data ---
       console.log(
-        "[/api/process-template] - Entrando al bucle de reemplazo iterativo."
+        "Entering iterative placeholder replacement (with contract data)."
       );
       let placeholdersReplaced = 0;
       let previousHTML = "";
@@ -141,58 +155,58 @@ export async function POST(request) {
       let previousPlaceholdersReplaced = 0;
       while (processedHTML !== previousHTML && iteration < 10) {
         iteration++;
-        console.log(
-          `[/api/process-template] - Iteración ${iteration} del bucle de reemplazo.`
-        );
+        console.log(`Iteration ${iteration} of placeholder replacement.`);
         previousHTML = processedHTML;
-        for (const placeholder in mainPlaceholders) {
-          const value = mainPlaceholders[placeholder];
-          const regex = new RegExp(
-            placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
-            "g"
-          );
-          const originalLength = processedHTML.length;
-          processedHTML = processedHTML.replace(regex, value || "");
-          if (processedHTML.length > originalLength) {
-            placeholdersReplaced++;
-            console.log(
-              `[/api/process-template] - Reemplazado '${placeholder}' con '${value}'`
+        const allPlaceholders = processedHTML.match(/{{[^{}]+}}/g) || [];
+        for (const placeholder of allPlaceholders) {
+          const fieldName = placeholder.slice(2, -2);
+          if (contractData[fieldName]) {
+            const regex = new RegExp(
+              placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+              "g"
             );
+            const originalLength = processedHTML.length;
+            processedHTML = processedHTML.replace(
+              regex,
+              contractData[fieldName] || ""
+            );
+            if (processedHTML.length > originalLength) {
+              placeholdersReplaced++;
+              console.log(
+                `Replaced '${placeholder}' with contract data: '${contractData[fieldName]}'`
+              );
+            }
           }
         }
         console.log(
-          `[/api/process-template] - Fin de la iteración ${iteration}. Reemplazos en esta iteración: ${placeholdersReplaced - previousPlaceholdersReplaced}`
+          `End of iteration ${iteration}. Replacements in this iteration: ${
+            placeholdersReplaced - previousPlaceholdersReplaced
+          }`
         );
         previousPlaceholdersReplaced = placeholdersReplaced;
       }
       console.log(
-        "[/api/process-template] - Saliendo del bucle de reemplazo iterativo. Total reemplazos:",
+        "Exiting iterative placeholder replacement. Total replacements:",
         placeholdersReplaced
       );
       console.log(
-        "[/api/process-template] - Contenido HTML final procesado:",
+        "Final processed HTML content:",
         processedHTML.substring(0, 200) + "..."
       );
 
-      return NextResponse.json({ processedHTML }, { status: 200 });
+      return NextResponse.json({ processedHTML }, { status: 200, headers });
     } catch (error) {
-      console.error(
-        "[/api/process-template] - Error al leer o procesar la plantilla:",
-        error
-      );
+      console.error("Error reading or processing the template:", error);
       return NextResponse.json(
-        { error: `Error al leer o procesar la plantilla: ${error.message}` },
-        { status: 500 }
+        { error: `Error reading or processing the template: ${error.message}` },
+        { status: 500, headers }
       );
     }
   } catch (error) {
-    console.error(
-      "[/api/process-template] - Error al procesar la solicitud:",
-      error
-    );
+    console.error("Error processing the request:", error);
     return NextResponse.json(
-      { error: error.message || "Ocurrió un error al procesar la solicitud." },
-      { status: 500 }
+      { error: error.message || "Ocurred an error processing the request." },
+      { status: 500, headers }
     );
   }
 }
