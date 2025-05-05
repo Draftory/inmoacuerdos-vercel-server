@@ -13,7 +13,38 @@ const CLAUSES_API_URL =
   "https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-get-clauses";
 
 async function fetchClauses() {
-  // ... (tu función fetchClauses actual)
+  try {
+    console.log(
+      "[/api/process-template] - Intentando obtener las cláusulas desde la API:",
+      CLAUSES_API_URL
+    );
+    const response = await fetch(CLAUSES_API_URL);
+    if (!response.ok) {
+      console.error(
+        `[/api/process-template] - Error al obtener las cláusulas: ${response.status} - ${await response.text()}`
+      );
+      return null;
+    }
+    const clausesData = await response.json();
+    console.log(
+      "[/api/process-template] - Cláusulas obtenidas exitosamente:",
+      clausesData
+    );
+
+    const clauses = clausesData.values.map((row) => ({
+      placeholder: `{{${row[0]}}}`,
+      value: row[1],
+      clauseText: row[2],
+    }));
+
+    return clauses;
+  } catch (error) {
+    console.error(
+      "[/api/process-template] - Error al obtener las cláusulas:",
+      error
+    );
+    return [];
+  }
 }
 
 export async function POST(request) {
@@ -101,9 +132,19 @@ export async function POST(request) {
       );
 
       // --- Reemplazo iterativo de todos los placeholders ---
+      console.log(
+        "[/api/process-template] - Entrando al bucle de reemplazo iterativo."
+      );
       let placeholdersReplaced = 0;
       let previousHTML = "";
-      while (processedHTML !== previousHTML) {
+      let iteration = 0;
+      let previousPlaceholdersReplaced = 0;
+      while (processedHTML !== previousHTML && iteration < 10) {
+        // Añadir un límite de seguridad
+        iteration++;
+        console.log(
+          `[/api/process-template] - Iteración ${iteration} del bucle de reemplazo.`
+        );
         previousHTML = processedHTML;
         for (const placeholder in mainPlaceholders) {
           const value = mainPlaceholders[placeholder];
@@ -115,11 +156,18 @@ export async function POST(request) {
           processedHTML = processedHTML.replace(regex, value || "");
           if (processedHTML.length > originalLength) {
             placeholdersReplaced++;
+            console.log(
+              `[/api/process-template] - Reemplazado '${placeholder}' con '${value}'`
+            );
           }
         }
+        console.log(
+          `[/api/process-template] - Fin de la iteración ${iteration}. Reemplazos en esta iteración: ${placeholdersReplaced - previousPlaceholdersReplaced}`
+        );
+        previousPlaceholdersReplaced = placeholdersReplaced;
       }
       console.log(
-        "[/api/process-template] - Placeholders reemplazados (iterativo):",
+        "[/api/process-template] - Saliendo del bucle de reemplazo iterativo. Total reemplazos:",
         placeholdersReplaced
       );
       console.log(
