@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import Airtable from 'airtable';
 
-/* Variables de entorno para Google */
+/* Variables de entorno para Google  */
 const GOOGLE_APPLICATION_CREDENTIALS_SECRET = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 const TEMPLATE_ID = process.env.ARG_LOCACION_DE_VIVIENDA_TEMPLATE_ID;
 const DESTINATION_FOLDER_ID = process.env.GOOGLE_DRIVE_DESTINATION_FOLDER_ID;
