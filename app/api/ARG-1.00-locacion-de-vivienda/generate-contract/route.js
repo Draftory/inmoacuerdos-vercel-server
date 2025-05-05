@@ -107,10 +107,10 @@ export async function POST(request) {
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Introducir las cláusulas en el HTML ---
+      // --- Reemplazo condicional de placeholders con cláusulas ---
       let clausesReplaced = 0;
       for (const clause of clauses) {
-        if (mainPlaceholders[clause.placeholder]) {
+        if (mainPlaceholders[clause.placeholder] === clause.value) {
           const regex = new RegExp(
             clause.placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
             "g"
@@ -131,7 +131,7 @@ export async function POST(request) {
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Reemplazo iterativo de todos los placeholders ---
+      // --- Reemplazo iterativo de todos los placeholders restantes ---
       console.log(
         "[/api/process-template] - Entrando al bucle de reemplazo iterativo."
       );
@@ -140,7 +140,6 @@ export async function POST(request) {
       let iteration = 0;
       let previousPlaceholdersReplaced = 0;
       while (processedHTML !== previousHTML && iteration < 10) {
-        // Añadir un límite de seguridad
         iteration++;
         console.log(
           `[/api/process-template] - Iteración ${iteration} del bucle de reemplazo.`
