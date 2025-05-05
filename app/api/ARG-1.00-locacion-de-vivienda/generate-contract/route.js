@@ -3,7 +3,6 @@ import * as fs from "fs/promises";
 import path from "path";
 import mammoth from "mammoth";
 
-// --- Ruta al archivo de la plantilla DOCX ---
 const TEMPLATE_PATH = path.join(
   process.cwd(),
   "app",
@@ -31,13 +30,21 @@ async function fetchClauses() {
       "[/api/process-template] - Cláusulas obtenidas exitosamente:",
       clausesData
     );
-    return clausesData; // Asume que la API devuelve un array de objetos con 'placeholder' y 'clauseText'
+
+    // Mapear la respuesta de la API al formato esperado (similar a App Script)
+    const clauses = clausesData.values.map((row) => ({
+      placeholder: `{{${row[0]}}}`, // Envuelve el primer elemento en {{ }}
+      value: row[1], // El segundo elemento como 'value'
+      clauseText: row[2], // El tercer elemento como 'clauseText'
+    }));
+
+    return clauses;
   } catch (error) {
     console.error(
       "[/api/process-template] - Error al obtener las cláusulas:",
       error
     );
-    return null;
+    return [];
   }
 }
 
@@ -53,7 +60,7 @@ export async function POST(request) {
 
     if (!mainPlaceholders || typeof mainPlaceholders !== "object") {
       console.error(
-        '[/api/process-template] - Error: Objeto "placeholders" principal inválido o faltante en el cuerpo de la solicitud.'
+        '[/api/process-template] - Error: Objeto "placeholders" principal inválido o faltante.'
       );
       return NextResponse.json(
         {
@@ -69,16 +76,16 @@ export async function POST(request) {
       mainPlaceholders
     );
 
-    // --- Obtener las cláusulas desde la API ---
     const clauses = await fetchClauses();
-    if (!clauses) {
+    if (!clauses || clauses.length === 0) {
       return NextResponse.json(
-        { error: "Error al obtener las cláusulas." },
+        {
+          error: "No se pudieron obtener las cláusulas o la lista está vacía.",
+        },
         { status: 500 }
       );
     }
 
-    // --- Leer el contenido de la plantilla DOCX ---
     try {
       console.log(
         "[/api/process-template] - Intentando leer el archivo de plantilla:",
@@ -103,21 +110,17 @@ export async function POST(request) {
 
       // --- Introducir las cláusulas en el HTML ---
       let clausesReplaced = 0;
-      if (clauses && clauses.values && Array.isArray(clauses.values)) {
-        for (const clauseArray of clauses.values) {
-          const placeholder = clauseArray[0]; // Asumiendo que el placeholder está en el primer elemento
-          const clauseText = clauseArray[2]; // Asumiendo que el clauseText está en el tercer elemento
-
-          if (mainPlaceholders[placeholder]) {
-            const regex = new RegExp(
-              placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
-              "g"
-            );
-            const originalLength = processedHTML.length;
-            processedHTML = processedHTML.replace(regex, clauseText || "");
-            if (processedHTML.length > originalLength) {
-              clausesReplaced++;
-            }
+      for (const clause of clauses) {
+        if (mainPlaceholders[clause.placeholder]) {
+          // Usa el placeholder con las llaves
+          const regex = new RegExp(
+            clause.placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+            "g"
+          );
+          const originalLength = processedHTML.length;
+          processedHTML = processedHTML.replace(regex, clause.clauseText || "");
+          if (processedHTML.length > originalLength) {
+            clausesReplaced++;
           }
         }
       }
@@ -131,7 +134,7 @@ export async function POST(request) {
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Reemplazar los placeholders restantes en el HTML (incluyendo los de las cláusulas) ---
+      // --- Reemplazar los placeholders principales restantes ---
       let mainPlaceholdersReplaced = 0;
       for (const placeholder in mainPlaceholders) {
         const value = mainPlaceholders[placeholder];
