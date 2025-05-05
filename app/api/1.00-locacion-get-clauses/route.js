@@ -1,66 +1,84 @@
-import { google } from 'googleapis';
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import Airtable from "airtable";
 
 // List of allowed origins
 const allowedOrigins = [
-  'https://www.inmoacuerdos.com',
-  'https://inmoacuerdos.webflow.io'
+  "https://www.inmoacuerdos.com",
+  "https://inmoacuerdos.webflow.io",
 ];
 
 export async function GET(req) {
-  console.log("Starting API request to Google Sheets");
+  console.log("Starting API request to Airtable");
+
+  // Initialize headers with a default value
+  let headers = {
+    "Access-Control-Allow-Origin": allowedOrigins[0], // Default to the first allowed origin
+    "Access-Control-Allow-Methods": "GET",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
 
   try {
     // Retrieve the request origin
-    const origin = req.headers.get('origin');
+    const origin = req.headers.get("origin");
 
     // Define CORS headers dynamically based on the request origin
-    const headers = {
-      'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0], // Use the first allowed origin as fallback
-      'Access-Control-Allow-Methods': 'GET',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    headers = {
+      "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
+        ? origin
+        : allowedOrigins[0],
+      "Access-Control-Allow-Methods": "GET",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
 
-    // Retrieve the Google service account credentials from environment variable
-    const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+    // Retrieve Airtable credentials
+    const airtablePersonalAccessToken =
+      process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
+    const airtableBaseId = process.env.AIRTABLE_BASE_ID_CLAUSES;
+    const airtableTableName =
+      process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
 
-    if (!googleCredentialsBase64) {
-      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+    if (!airtablePersonalAccessToken) {
+      throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
+    }
+    if (!airtableBaseId) {
+      throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
     }
 
-    // Decode the Base64 string into JSON
-    const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
+    const base = new Airtable({ apiKey: airtablePersonalAccessToken }).base(
+      airtableBaseId
+    );
+    console.log("Airtable client initialized");
 
-    // Parse the JSON string to an object
-    const credentials = JSON.parse(googleCredentialsJson);
-
-    console.log("GOOGLE_APPLICATION_CREDENTIALS decoded and ready for use");
-
-    // Authenticate with Google Sheets API using Service Account
-    const auth = new google.auth.GoogleAuth({
-      credentials, // Use the credentials directly from memory
-      scopes: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+    return new Promise((resolve, reject) => {
+      const records = [];
+      base(airtableTableName)
+        .select({
+          // Add your select options here if needed
+        })
+        .eachPage(
+          function page(partialRecords, fetchNextPage) {
+            console.log("Retrieved a page of records", partialRecords);
+            records.push(...partialRecords);
+            fetchNextPage();
+          },
+          function done(err) {
+            if (err) {
+              console.error("Error fetching records from Airtable:", err);
+              resolve(NextResponse.error({ status: 500, headers }));
+              return;
+            }
+            console.log("Successfully fetched all records from Airtable");
+            const values = records.map((record) =>
+              Object.values(record.fields)
+            );
+            const airtableResponse = { values };
+            console.log("Formatted Airtable data:", airtableResponse);
+            resolve(NextResponse.json(airtableResponse, { headers }));
+          }
+        );
     });
-
-    const client = await auth.getClient();
-    console.log("Authenticated with Google Sheets API");
-
-    const sheets = google.sheets({ version: 'v4', auth: client });
-
-    // Attempt to fetch data from the specified Google Sheet
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.locacion_get_clauses_SHEET_ID,
-      range: 'Clausulas-locacion-vivienda', // Adjust the range if needed
-    });
-
-    console.log("Fetched Google Sheets data:", response.data);
-
-    // Return the response with the appropriate CORS headers
-    return NextResponse.json(response.data, { headers });
   } catch (error) {
-    console.error("Error fetching data from Google Sheets:", error);
-
-    // Return a generic error response with the CORS headers
+    console.error("Error processing Airtable request:", error);
     return NextResponse.error({ status: 500, headers });
   }
 }
