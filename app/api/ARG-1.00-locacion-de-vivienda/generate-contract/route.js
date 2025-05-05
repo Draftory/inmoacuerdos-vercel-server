@@ -13,39 +13,7 @@ const CLAUSES_API_URL =
   "https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-get-clauses";
 
 async function fetchClauses() {
-  try {
-    console.log(
-      "[/api/process-template] - Intentando obtener las cláusulas desde la API:",
-      CLAUSES_API_URL
-    );
-    const response = await fetch(CLAUSES_API_URL);
-    if (!response.ok) {
-      console.error(
-        `[/api/process-template] - Error al obtener las cláusulas: ${response.status} - ${await response.text()}`
-      );
-      return null;
-    }
-    const clausesData = await response.json();
-    console.log(
-      "[/api/process-template] - Cláusulas obtenidas exitosamente:",
-      clausesData
-    );
-
-    // Mapear la respuesta de la API al formato esperado (similar a App Script)
-    const clauses = clausesData.values.map((row) => ({
-      placeholder: `{{${row[0]}}}`, // Envuelve el primer elemento en {{ }}
-      value: row[1], // El segundo elemento como 'value'
-      clauseText: row[2], // El tercer elemento como 'clauseText'
-    }));
-
-    return clauses;
-  } catch (error) {
-    console.error(
-      "[/api/process-template] - Error al obtener las cláusulas:",
-      error
-    );
-    return [];
-  }
+  // ... (tu función fetchClauses actual)
 }
 
 export async function POST(request) {
@@ -104,7 +72,7 @@ export async function POST(request) {
       let processedHTML = templateHTML;
 
       console.log(
-        "[/api/process-template] - Contenido HTML inicial (antes de reemplazar cláusulas):",
+        "[/api/process-template] - Contenido HTML inicial (antes de reemplazar):",
         processedHTML.substring(0, 200) + "..."
       );
 
@@ -112,7 +80,6 @@ export async function POST(request) {
       let clausesReplaced = 0;
       for (const clause of clauses) {
         if (mainPlaceholders[clause.placeholder]) {
-          // Usa el placeholder con las llaves
           const regex = new RegExp(
             clause.placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
             "g"
@@ -124,7 +91,6 @@ export async function POST(request) {
           }
         }
       }
-
       console.log(
         "[/api/process-template] - Cláusulas introducidas:",
         clausesReplaced
@@ -134,24 +100,27 @@ export async function POST(request) {
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Reemplazar los placeholders principales restantes ---
-      let mainPlaceholdersReplaced = 0;
-      for (const placeholder in mainPlaceholders) {
-        const value = mainPlaceholders[placeholder];
-        const regex = new RegExp(
-          placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
-          "g"
-        );
-        const originalLength = processedHTML.length;
-        processedHTML = processedHTML.replace(regex, value || "");
-        if (processedHTML.length > originalLength) {
-          mainPlaceholdersReplaced++;
+      // --- Reemplazo iterativo de todos los placeholders ---
+      let placeholdersReplaced = 0;
+      let previousHTML = "";
+      while (processedHTML !== previousHTML) {
+        previousHTML = processedHTML;
+        for (const placeholder in mainPlaceholders) {
+          const value = mainPlaceholders[placeholder];
+          const regex = new RegExp(
+            placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+            "g"
+          );
+          const originalLength = processedHTML.length;
+          processedHTML = processedHTML.replace(regex, value || "");
+          if (processedHTML.length > originalLength) {
+            placeholdersReplaced++;
+          }
         }
       }
-
       console.log(
-        "[/api/process-template] - Placeholders principales reemplazados:",
-        mainPlaceholdersReplaced
+        "[/api/process-template] - Placeholders reemplazados (iterativo):",
+        placeholdersReplaced
       );
       console.log(
         "[/api/process-template] - Contenido HTML final procesado:",
