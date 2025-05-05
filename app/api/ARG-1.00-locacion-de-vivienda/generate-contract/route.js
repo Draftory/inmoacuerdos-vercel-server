@@ -10,7 +10,8 @@ const TEMPLATE_PATH = path.join(
   "Templates",
   "1.00 - Contrato de Locación de Vivienda - Template.docx"
 );
-const CLAUSES_API_URL = "/api/1.00-locacion-get-clauses"; // Ajusta la URL si es externa
+const CLAUSES_API_URL =
+  "https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-get-clauses";
 
 async function fetchClauses() {
   try {
