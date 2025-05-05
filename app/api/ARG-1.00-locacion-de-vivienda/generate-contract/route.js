@@ -10,6 +10,35 @@ const TEMPLATE_PATH = path.join(
   "Templates",
   "1.00 - Contrato de Locación de Vivienda - Template.docx"
 );
+const CLAUSES_API_URL = "/api/1.00-locacion-get-clauses"; // Ajusta la URL si es externa
+
+async function fetchClauses() {
+  try {
+    console.log(
+      "[/api/process-template] - Intentando obtener las cláusulas desde la API:",
+      CLAUSES_API_URL
+    );
+    const response = await fetch(CLAUSES_API_URL);
+    if (!response.ok) {
+      console.error(
+        `[/api/process-template] - Error al obtener las cláusulas: ${response.status} - ${await response.text()}`
+      );
+      return null;
+    }
+    const clausesData = await response.json();
+    console.log(
+      "[/api/process-template] - Cláusulas obtenidas exitosamente:",
+      clausesData
+    );
+    return clausesData; // Asume que la API devuelve un array de objetos con 'placeholder' y 'clauseText'
+  } catch (error) {
+    console.error(
+      "[/api/process-template] - Error al obtener las cláusulas:",
+      error
+    );
+    return null;
+  }
+}
 
 export async function POST(request) {
   console.log("[/api/process-template] - Recibida una solicitud POST");
@@ -19,11 +48,11 @@ export async function POST(request) {
       "[/api/process-template] - Cuerpo de la solicitud:",
       requestBody
     );
-    const { placeholders } = requestBody;
+    const { placeholders: mainPlaceholders } = requestBody;
 
-    if (!placeholders || typeof placeholders !== "object") {
+    if (!mainPlaceholders || typeof mainPlaceholders !== "object") {
       console.error(
-        '[/api/process-template] - Error: Objeto "placeholders" inválido o faltante en el cuerpo de la solicitud.'
+        '[/api/process-template] - Error: Objeto "placeholders" principal inválido o faltante en el cuerpo de la solicitud.'
       );
       return NextResponse.json(
         {
@@ -35,9 +64,18 @@ export async function POST(request) {
     }
 
     console.log(
-      "[/api/process-template] - Placeholders recibidos:",
-      placeholders
+      "[/api/process-template] - Placeholders principales recibidos:",
+      mainPlaceholders
     );
+
+    // --- Obtener las cláusulas desde la API ---
+    const clauses = await fetchClauses();
+    if (!clauses) {
+      return NextResponse.json(
+        { error: "Error al obtener las cláusulas." },
+        { status: 500 }
+      );
+    }
 
     // --- Leer el contenido de la plantilla DOCX ---
     try {
@@ -58,14 +96,40 @@ export async function POST(request) {
       let processedHTML = templateHTML;
 
       console.log(
-        "[/api/process-template] - Contenido HTML inicial (antes de reemplazar):",
+        "[/api/process-template] - Contenido HTML inicial (antes de reemplazar cláusulas):",
         processedHTML.substring(0, 200) + "..."
-      ); // Mostrar solo los primeros 200 caracteres
+      );
 
-      // --- Reemplazar los placeholders en el HTML ---
-      let replacements = 0;
-      for (const placeholder in placeholders) {
-        const value = placeholders[placeholder];
+      // --- Introducir las cláusulas en el HTML ---
+      let clausesReplaced = 0;
+      for (const clause of clauses) {
+        const { placeholder, clauseText } = clause;
+        if (mainPlaceholders[placeholder]) {
+          const regex = new RegExp(
+            placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+            "g"
+          );
+          const originalLength = processedHTML.length;
+          processedHTML = processedHTML.replace(regex, clauseText || "");
+          if (processedHTML.length > originalLength) {
+            clausesReplaced++;
+          }
+        }
+      }
+
+      console.log(
+        "[/api/process-template] - Cláusulas introducidas:",
+        clausesReplaced
+      );
+      console.log(
+        "[/api/process-template] - Contenido HTML después de introducir cláusulas:",
+        processedHTML.substring(0, 200) + "..."
+      );
+
+      // --- Reemplazar los placeholders restantes en el HTML (incluyendo los de las cláusulas) ---
+      let mainPlaceholdersReplaced = 0;
+      for (const placeholder in mainPlaceholders) {
+        const value = mainPlaceholders[placeholder];
         const regex = new RegExp(
           placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
           "g"
@@ -73,18 +137,18 @@ export async function POST(request) {
         const originalLength = processedHTML.length;
         processedHTML = processedHTML.replace(regex, value || "");
         if (processedHTML.length > originalLength) {
-          replacements++;
+          mainPlaceholdersReplaced++;
         }
       }
 
       console.log(
-        "[/api/process-template] - Reemplazos realizados:",
-        replacements
+        "[/api/process-template] - Placeholders principales reemplazados:",
+        mainPlaceholdersReplaced
       );
       console.log(
-        "[/api/process-template] - Contenido HTML procesado (después de reemplazar):",
+        "[/api/process-template] - Contenido HTML final procesado:",
         processedHTML.substring(0, 200) + "..."
-      ); // Mostrar solo los primeros 200 caracteres
+      );
 
       return NextResponse.json({ processedHTML }, { status: 200 });
     } catch (error) {
