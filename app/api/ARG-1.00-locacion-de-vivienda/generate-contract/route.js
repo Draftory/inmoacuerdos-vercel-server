@@ -35,13 +35,13 @@ export async function POST(request) {
 
     // Retrieve Airtable credentials for contract data
     const airtablePersonalAccessToken =
-      process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
+      process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN_ARG_DATABASE;
     const airtableBaseId = process.env.AIRTABLE_BASE_ID_CONTRACT_DATABASE;
     const airtableTableName =
       process.env.AIRTABLE_CONTRACTS_TABLE_NAME || "Contratos"; // Default table name
 
     if (!airtablePersonalAccessToken) {
-      throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
+      throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN_ARG_DATABASE is not set");
     }
     if (!airtableBaseId) {
       throw new Error("AIRTABLE_BASE_ID_CONTRACT_DATABASE is not set");
@@ -68,19 +68,24 @@ export async function POST(request) {
     const contractData = record.fields;
     console.log("Contract data fetched from Airtable:", contractData);
 
-    // Fetch clauses from the other Airtable base (using your existing fetchClauses logic)
+    // Fetch clauses
     async function fetchClauses() {
       try {
+        const airtablePersonalAccessTokenClauses =
+          process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
         const airtableBaseIdClauses = process.env.AIRTABLE_BASE_ID_CLAUSES;
         const airtableTableNameClauses =
           process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
 
+        if (!airtablePersonalAccessTokenClauses) {
+          throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
+        }
         if (!airtableBaseIdClauses) {
           throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
         }
 
         const baseClauses = new Airtable({
-          apiKey: airtablePersonalAccessToken,
+          apiKey: airtablePersonalAccessTokenClauses,
         }).base(airtableBaseIdClauses);
         console.log("Airtable client for clauses initialized");
 
