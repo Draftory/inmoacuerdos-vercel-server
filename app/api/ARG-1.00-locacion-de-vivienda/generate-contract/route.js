@@ -103,17 +103,21 @@ export async function POST(request) {
 
       // --- Introducir las cláusulas en el HTML ---
       let clausesReplaced = 0;
-      for (const clause of clauses) {
-        const { placeholder, clauseText } = clause;
-        if (mainPlaceholders[placeholder]) {
-          const regex = new RegExp(
-            placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
-            "g"
-          );
-          const originalLength = processedHTML.length;
-          processedHTML = processedHTML.replace(regex, clauseText || "");
-          if (processedHTML.length > originalLength) {
-            clausesReplaced++;
+      if (clauses && clauses.values && Array.isArray(clauses.values)) {
+        for (const clauseArray of clauses.values) {
+          const placeholder = clauseArray[0]; // Asumiendo que el placeholder está en el primer elemento
+          const clauseText = clauseArray[2]; // Asumiendo que el clauseText está en el tercer elemento
+
+          if (mainPlaceholders[placeholder]) {
+            const regex = new RegExp(
+              placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+              "g"
+            );
+            const originalLength = processedHTML.length;
+            processedHTML = processedHTML.replace(regex, clauseText || "");
+            if (processedHTML.length > originalLength) {
+              clausesReplaced++;
+            }
           }
         }
       }
