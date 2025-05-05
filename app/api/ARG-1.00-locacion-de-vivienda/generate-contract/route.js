@@ -40,6 +40,9 @@ export async function POST(request) {
     const airtableTableName =
       process.env.AIRTABLE_CONTRACTS_TABLE_NAME || "Contratos"; // Default table name
 
+    console.log("Airtable Token (Contract Data):", airtablePersonalAccessToken);
+    console.log("Airtable Base ID (Contract Data):", airtableBaseId);
+
     if (!airtablePersonalAccessToken) {
       throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN_ARG_DATABASE is not set");
     }
@@ -53,7 +56,18 @@ export async function POST(request) {
     console.log("Airtable client for contract data initialized");
 
     // Fetch contract data from Airtable
-    const record = await base(airtableTableName).find(recordId);
+    let record;
+    try {
+      record = await base(airtableTableName).find(recordId);
+    } catch (error) {
+      console.error("Error fetching record from Airtable:", error);
+      return NextResponse.json(
+        {
+          error: `Error fetching record with ID ${recordId} from Airtable: ${error.message}`,
+        },
+        { status: 500, headers }
+      );
+    }
 
     if (!record || !record.fields) {
       console.error(
@@ -76,6 +90,12 @@ export async function POST(request) {
         const airtableBaseIdClauses = process.env.AIRTABLE_BASE_ID_CLAUSES;
         const airtableTableNameClauses =
           process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
+
+        console.log(
+          "Airtable Token (Clauses):",
+          airtablePersonalAccessTokenClauses
+        );
+        console.log("Airtable Base ID (Clauses):", airtableBaseIdClauses);
 
         if (!airtablePersonalAccessTokenClauses) {
           throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
