@@ -8,7 +8,7 @@ const TEMPLATE_PATH = path.join(
   process.cwd(),
   "app",
   "Templates",
-  "1.00 - Contrato de Locación de Vivienda - Template.docx"
+  "1.00 - Contrato de LocaciÃ³n de Vivienda - Template.docx"
 );
 
 export async function POST(request) {
@@ -88,58 +88,37 @@ export async function POST(request) {
     const contractData = record.fields;
     console.log("Contract data fetched from Airtable:", contractData);
 
-    // Fetch clauses using IDs
+    // Fetch clauses from the separate API endpoint
     async function fetchClauses() {
       try {
-        const airtablePersonalAccessTokenClauses =
-          process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
-        const airtableBaseIdClauses = process.env.AIRTABLE_BASE_ID_CLAUSES;
-        const airtableTableIdClauses = process.env.AIRTABLE_CLAUSES_TABLE_ID;
-
-        console.log(
-          "Airtable Token (Clauses):",
-          airtablePersonalAccessTokenClauses
-        );
-        console.log("Airtable Base ID (Clauses):", airtableBaseIdClauses);
-        console.log("Airtable Table ID (Clauses):", airtableTableIdClauses);
-
-        if (!airtablePersonalAccessTokenClauses) {
-          throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
+        const clausesResponse = await fetch("/api/1.00-locacion-get-clauses");
+        if (!clausesResponse.ok) {
+          console.error(
+            "Error fetching clauses from /api/1.00-locacion-get-clauses:",
+            clausesResponse.status,
+            clausesResponse.statusText
+          );
+          return { values: [] };
         }
-        if (!airtableBaseIdClauses) {
-          throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
-        }
-        if (!airtableTableIdClauses) {
-          throw new Error("AIRTABLE_CLAUSES_TABLE_ID is not set");
-        }
-
-        const baseClauses = new Airtable({
-          apiKey: airtablePersonalAccessTokenClauses,
-        }).base(airtableBaseIdClauses);
-        console.log("Airtable client for clauses initialized");
-
-        const records = [];
-        await baseClauses(airtableTableIdClauses)
-          .select()
-          .eachPage((partialRecords, fetchNextPage) => {
-            records.push(...partialRecords);
-            fetchNextPage();
-          });
-
-        const values = records.map((r) => Object.values(r.fields));
-        return { values };
+        const clausesData = await clausesResponse.json();
+        return clausesData;
       } catch (error) {
-        console.error("Error fetching clauses from Airtable:", error);
+        console.error(
+          "Error fetching clauses from /api/1.00-locacion-get-clauses:",
+          error
+        );
         return { values: [] };
       }
     }
 
     const clausesResponse = await fetchClauses();
-    const clauses = clausesResponse.values.map((row) => ({
-      placeholder: `{{${row[0]}}}`,
-      value: row[1],
-      clauseText: row[2],
-    }));
+    const clauses = clausesResponse.values
+      ? clausesResponse.values.map((row) => ({
+          placeholder: `{{${row[0]}}}`,
+          value: row[1],
+          clauseText: row[2],
+        }))
+      : [];
     console.log("Fetched clauses:", clauses);
 
     try {
