@@ -90,7 +90,8 @@ export async function POST(request) {
 
     // Fetch clauses from the separate API endpoint
     async function fetchClauses() {
-      const clausesEndpoint = "/api/1.00-locacion-get-clauses";
+      const clausesEndpoint =
+        "https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-get-clauses";
       console.log("Attempting to fetch clauses from:", clausesEndpoint);
       try {
         const clausesResponse = await fetch(clausesEndpoint);
