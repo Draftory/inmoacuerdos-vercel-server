@@ -141,17 +141,36 @@ export async function POST(request) {
 
       // --- Replace placeholders with matching clauses ---
       let clausesReplaced = 0;
-      for (const clause of clauses) {
-        const placeholderWithoutBraces = clause.placeholder.slice(2, -2);
-        if (contractData[placeholderWithoutBraces] === clause.value) {
-          const regex = new RegExp(
-            clause.placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
-            "g"
-          );
-          const originalLength = processedHTML.length;
-          processedHTML = processedHTML.replace(regex, clause.clauseText || "");
-          if (processedHTML.length > originalLength) {
-            clausesReplaced++;
+      const allTemplatePlaceholders = processedHTML.match(/{{[^{}]+}}/g) || [];
+
+      for (const templatePlaceholder of allTemplatePlaceholders) {
+        const placeholderWithoutBraces = templatePlaceholder.slice(2, -2);
+        const contractValue = contractData[placeholderWithoutBraces];
+
+        if (contractValue) {
+          for (const clause of clauses) {
+            const clausePlaceholderWithoutBraces = clause.placeholder.slice(
+              2,
+              -2
+            );
+            if (
+              clausePlaceholderWithoutBraces === placeholderWithoutBraces &&
+              clause.value === contractValue
+            ) {
+              const regex = new RegExp(
+                templatePlaceholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+                "g"
+              );
+              const originalLength = processedHTML.length;
+              processedHTML = processedHTML.replace(
+                regex,
+                clause.clauseText || ""
+              );
+              if (processedHTML.length > originalLength) {
+                clausesReplaced++;
+                break; // Importante: detener la búsqueda de cláusulas para este placeholder una vez que se encuentra una coincidencia
+              }
+            }
           }
         }
       }
