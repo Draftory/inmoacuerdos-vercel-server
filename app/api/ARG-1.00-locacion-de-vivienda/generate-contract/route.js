@@ -141,12 +141,11 @@ export async function POST(request) {
 
       // --- Replace placeholders with matching clauses ---
       let clausesReplaced = 0;
-      const allTemplatePlaceholders = processedHTML.match(/{{[^{}]+}}/g) || [];
-
-      for (const templatePlaceholder of allTemplatePlaceholders) {
+      const allTemplatePlaceholdersInitial =
+        processedHTML.match(/{{[^{}]+}}/g) || [];
+      for (const templatePlaceholder of allTemplatePlaceholdersInitial) {
         const placeholderWithoutBraces = templatePlaceholder.slice(2, -2);
         const contractValue = contractData[placeholderWithoutBraces];
-
         if (contractValue) {
           for (const clause of clauses) {
             const clausePlaceholderWithoutBraces = clause.placeholder.slice(
@@ -168,21 +167,21 @@ export async function POST(request) {
               );
               if (processedHTML.length > originalLength) {
                 clausesReplaced++;
-                break; // Importante: detener la búsqueda de cláusulas para este placeholder una vez que se encuentra una coincidencia
+                break;
               }
             }
           }
         }
       }
-      console.log("Clauses introduced:", clausesReplaced);
+      console.log("Clauses introduced (initial):", clausesReplaced);
       console.log(
-        "HTML content after introducing clauses:",
+        "HTML content after introducing initial clauses:",
         processedHTML.substring(0, 200) + "..."
       );
 
-      // --- Iteratively replace all remaining placeholders with contract data ---
+      // --- Iteratively replace all remaining placeholders with contract data or nested clauses ---
       console.log(
-        "Entering iterative placeholder replacement (with contract data)."
+        "Entering iterative placeholder replacement (with contract data or nested clauses)."
       );
       let placeholdersReplaced = 0;
       let previousHTML = "";
@@ -194,22 +193,56 @@ export async function POST(request) {
         previousHTML = processedHTML;
         const allPlaceholders = processedHTML.match(/{{[^{}]+}}/g) || [];
         for (const placeholder of allPlaceholders) {
-          const fieldName = placeholder.slice(2, -2);
-          if (contractData[fieldName]) {
-            const regex = new RegExp(
-              placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
-              "g"
-            );
-            const originalLength = processedHTML.length;
-            processedHTML = processedHTML.replace(
-              regex,
-              contractData[fieldName] || ""
-            );
-            if (processedHTML.length > originalLength) {
-              placeholdersReplaced++;
-              console.log(
-                `Replaced '${placeholder}' with contract data: '${contractData[fieldName]}'`
+          const placeholderWithoutBraces = placeholder.slice(2, -2);
+          const contractValue = contractData[placeholderWithoutBraces];
+
+          if (contractValue) {
+            let replacedNested = false;
+            for (const clause of clauses) {
+              const clausePlaceholderWithoutBraces = clause.placeholder.slice(
+                2,
+                -2
               );
+              if (
+                clausePlaceholderWithoutBraces === placeholderWithoutBraces &&
+                clause.value === contractValue
+              ) {
+                const regex = new RegExp(
+                  placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+                  "g"
+                );
+                const originalLength = processedHTML.length;
+                processedHTML = processedHTML.replace(
+                  regex,
+                  clause.clauseText || ""
+                );
+                if (processedHTML.length > originalLength) {
+                  placeholdersReplaced++;
+                  replacedNested = true;
+                  console.log(
+                    `Replaced nested placeholder '${placeholder}' with clause: '${clause.clauseText}'`
+                  );
+                  break; // Stop searching for this placeholder once replaced with a clause
+                }
+              }
+            }
+            // If not replaced by a full clause, try to replace directly with contract data
+            if (!replacedNested && contractData[placeholderWithoutBraces]) {
+              const regex = new RegExp(
+                placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"),
+                "g"
+              );
+              const originalLength = processedHTML.length;
+              processedHTML = processedHTML.replace(
+                regex,
+                contractData[placeholderWithoutBraces] || ""
+              );
+              if (processedHTML.length > originalLength) {
+                placeholdersReplaced++;
+                console.log(
+                  `Replaced placeholder '${placeholder}' with contract data: '${contractData[placeholderWithoutBraces]}'`
+                );
+              }
             }
           }
         }
