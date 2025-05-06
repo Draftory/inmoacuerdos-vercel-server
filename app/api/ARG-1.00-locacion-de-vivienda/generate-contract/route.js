@@ -8,7 +8,7 @@ const TEMPLATE_PATH = path.join(
   process.cwd(),
   "app",
   "Templates",
-  "1.00 - Contrato de LocaciÃ³n de Vivienda - Template.docx"
+  "1.00 - Contrato de Locación de Vivienda - Template.docx"
 );
 
 export async function POST(request) {
@@ -91,7 +91,7 @@ export async function POST(request) {
     // Fetch clauses from the separate API endpoint
     async function fetchClauses() {
       try {
-        const clausesResponse = await fetch("/api/1.00-locacion-get-clauses");
+        const clausesResponse = await fetch("/api/1.00-locacion-get-clauses/");
         if (!clausesResponse.ok) {
           console.error(
             "Error fetching clauses from /api/1.00-locacion-get-clauses:",
