@@ -90,8 +90,10 @@ export async function POST(request) {
 
     // Fetch clauses from the separate API endpoint
     async function fetchClauses() {
+      const clausesEndpoint = "/api/1.00-locacion-get-clauses";
+      console.log("Attempting to fetch clauses from:", clausesEndpoint);
       try {
-        const clausesResponse = await fetch("/api/1.00-locacion-get-clauses");
+        const clausesResponse = await fetch(clausesEndpoint);
         if (!clausesResponse.ok) {
           console.error(
             "Error fetching clauses from /api/1.00-locacion-get-clauses:",
