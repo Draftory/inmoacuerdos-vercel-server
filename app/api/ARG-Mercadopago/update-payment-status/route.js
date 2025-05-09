@@ -8,6 +8,7 @@ const allowedOrigins = [
 
 // Environment variables
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
+const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET; // Asegúrate de que esta variable esté definida en Vercel
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -16,7 +17,8 @@ export async function OPTIONS(req) {
       ? origin
       : allowedOrigins[0],
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization", // Sin X-Vercel-Secret
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-Vercel-Secret", // Incluimos el header de seguridad
   };
 
   return new NextResponse(null, {
@@ -27,7 +29,7 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
   console.log(
-    "Starting API request to Google Sheets for payment update (SIN seguridad)"
+    "Starting API request to Google Sheets for payment update (CON seguridad)"
   );
   const origin = req.headers.get("origin");
   const headers = {
@@ -35,8 +37,23 @@ export async function POST(req) {
       ? origin
       : allowedOrigins[0],
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization", // Sin X-Vercel-Secret
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-Vercel-Secret", // Incluimos el header de seguridad
   };
+
+  // --- **IMPORTANT: Ensure VERCEL_API_SECRET is set in your Vercel Environment Variables** ---
+  if (!VERCEL_API_SECRET) {
+    console.error(
+      "Error: VERCEL_API_SECRET environment variable is not set in Vercel."
+    );
+    return new NextResponse(
+      JSON.stringify({ error: "Server configuration error." }),
+      {
+        status: 500,
+        headers: headers,
+      }
+    );
+  }
 
   try {
     // Leer el cuerpo de la solicitud una sola vez
@@ -176,13 +193,14 @@ export async function POST(req) {
         `Payment details updated for contractID: ${contractID} in row ${rowIndex}.`
       );
 
-      // --- Trigger Google Apps Script function WITHOUT secret header ---
-      if (APPS_SCRIPT_URL) {
+      // --- Trigger Google Apps Script function WITH secret header ---
+      if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
         try {
           const response = await fetch(APPS_SCRIPT_URL, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "X-Vercel-Secret": VERCEL_API_SECRET, // Incluimos el header de seguridad
             },
             body: JSON.stringify({
               spreadsheetId: spreadsheetId,
@@ -196,12 +214,12 @@ export async function POST(req) {
           if (response.ok) {
             const scriptResult = await response.json();
             console.log(
-              "Google Apps Script triggered successfully (SIN seguridad):",
+              "Google Apps Script triggered successfully (SECURE):",
               scriptResult
             );
           } else {
             console.error(
-              "Error triggering Google Apps Script (SIN seguridad):",
+              "Error triggering Google Apps Script (SECURE):",
               response.status,
               response.statusText
             );
@@ -209,14 +227,14 @@ export async function POST(req) {
           }
         } catch (error) {
           console.error(
-            "Error sending request to Google Apps Script (SIN seguridad):",
+            "Error sending request to Google Apps Script (SECURE):",
             error
           );
           // Optionally handle the error
         }
       } else {
         console.warn(
-          "APPS_SCRIPT_URL environment variable not set. Skipping trigger of generateDocumentsForRow."
+          "APPS_SCRIPT_URL or VERCEL_API_SECRET environment variable not set. Skipping trigger of generateDocumentsForRow."
         );
       }
       // --- End Trigger ---
@@ -239,7 +257,7 @@ export async function POST(req) {
       );
     }
   } catch (error) {
-    console.error("POST Error (Update Payment Status - SIN seguridad):", error);
+    console.error("POST Error (Update Payment Status - SECURE):", error);
     return new NextResponse(
       JSON.stringify({ error: error.message, stack: error.stack }),
       {
