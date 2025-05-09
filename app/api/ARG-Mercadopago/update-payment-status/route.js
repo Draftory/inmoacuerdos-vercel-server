@@ -8,7 +8,6 @@ const allowedOrigins = [
 
 // Environment variables
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
-const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET; // Asegúrate de definir esta variable en Vercel
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -17,8 +16,7 @@ export async function OPTIONS(req) {
       ? origin
       : allowedOrigins[0],
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Vercel-Secret", // Incluye el encabezado personalizado
+    "Access-Control-Allow-Headers": "Content-Type, Authorization", // Sin X-Vercel-Secret
   };
 
   return new NextResponse(null, {
@@ -28,15 +26,16 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log("Starting API request to Google Sheets for payment update");
+  console.log(
+    "Starting API request to Google Sheets for payment update (SIN seguridad)"
+  );
   const origin = req.headers.get("origin");
   const headers = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Vercel-Secret", // Incluye el encabezado personalizado
+    "Access-Control-Allow-Headers": "Content-Type, Authorization", // Sin X-Vercel-Secret
   };
 
   try {
@@ -177,14 +176,13 @@ export async function POST(req) {
         `Payment details updated for contractID: ${contractID} in row ${rowIndex}.`
       );
 
-      // --- Trigger Google Apps Script function with secret header ---
-      if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
+      // --- Trigger Google Apps Script function WITHOUT secret header ---
+      if (APPS_SCRIPT_URL) {
         try {
           const response = await fetch(APPS_SCRIPT_URL, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "X-Vercel-Secret": VERCEL_API_SECRET, // Include the secret header
             },
             body: JSON.stringify({
               spreadsheetId: spreadsheetId,
@@ -215,7 +213,7 @@ export async function POST(req) {
         }
       } else {
         console.warn(
-          "APPS_SCRIPT_URL or VERCEL_API_SECRET environment variable not set. Skipping trigger of generateDocumentsForRow."
+          "APPS_SCRIPT_URL environment variable not set. Skipping trigger of generateDocumentsForRow."
         );
       }
       // --- End Trigger ---
