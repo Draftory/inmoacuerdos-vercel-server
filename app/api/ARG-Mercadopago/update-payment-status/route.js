@@ -17,8 +17,7 @@ export async function OPTIONS(req) {
       ? origin
       : allowedOrigins[0],
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Vercel-Secret", // Incluimos el header de seguridad
+    "Access-Control-Allow-Headers": "Content-Type", // Ya no necesitamos X-Vercel-Secret aquí
   };
 
   return new NextResponse(null, {
@@ -29,7 +28,7 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
   console.log(
-    "Starting API request to Google Sheets for payment update (CON seguridad)"
+    "Starting API request to Google Sheets for payment update (CON seguridad - Secreto en el body)"
   );
   const origin = req.headers.get("origin");
   const headers = {
@@ -37,8 +36,7 @@ export async function POST(req) {
       ? origin
       : allowedOrigins[0],
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Vercel-Secret", // Incluimos el header de seguridad
+    "Access-Control-Allow-Headers": "Content-Type", // Ya no necesitamos X-Vercel-Secret aquí
   };
 
   // --- **IMPORTANT: Ensure VERCEL_API_SECRET is set in your Vercel Environment Variables** ---
@@ -56,11 +54,9 @@ export async function POST(req) {
   }
 
   try {
-    // Leer el cuerpo de la solicitud una sola vez
     const paymentData = await req.json();
     console.log("Request Body:", paymentData);
 
-    // Desestructurar los datos necesarios
     const { payment_id, estadoDePago, fechaDePago, contractID, tipoDePago } =
       paymentData;
 
@@ -142,7 +138,6 @@ export async function POST(req) {
       throw new Error("status column not found in the header.");
     }
 
-    // Retrieve all rows to find the row with matching contractID
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!A:VM`, // Adjust the range to cover all columns
@@ -160,8 +155,7 @@ export async function POST(req) {
     }
 
     if (rowIndex !== -1) {
-      // Prepare the updated row data
-      const updatedRow = allRows[rowIndex - 1] || []; // Get existing row or default to empty array
+      const updatedRow = allRows[rowIndex - 1] || [];
 
       updatedRow[paymentIdColumnIndex] =
         payment_id || updatedRow[paymentIdColumnIndex] || "";
@@ -178,9 +172,8 @@ export async function POST(req) {
       if (estadoDePago && estadoDePago.toLowerCase() === "approved") {
         updatedRow[statusColumnIndex] = "Contrato";
       }
-      const lastColumnLetter = getColumnLetter(updatedRow.length); //dynamically calculate the last column
+      const lastColumnLetter = getColumnLetter(updatedRow.length);
 
-      // Update the entire row in one API call
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
@@ -193,41 +186,41 @@ export async function POST(req) {
         `Payment details updated for contractID: ${contractID} in row ${rowIndex}.`
       );
 
-      // --- Trigger Google Apps Script function WITH secret header ---
+      // --- Trigger Google Apps Script function WITH secret in body ---
       if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
         try {
           const response = await fetch(APPS_SCRIPT_URL, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "X-Vercel-Secret": VERCEL_API_SECRET, // Incluimos el header de seguridad
             },
             body: JSON.stringify({
+              secret: VERCEL_API_SECRET, // Incluir el secreto en el body
               spreadsheetId: spreadsheetId,
               sheetName: sheetName,
               rowNumber: rowIndex,
-              rowData: rowDataToPass, // Pass the data of the updated row
-              headers: headerRow, // Pass the headers for context
+              rowData: rowDataToPass,
+              headers: headerRow,
             }),
           });
 
           if (response.ok) {
             const scriptResult = await response.json();
             console.log(
-              "Google Apps Script triggered successfully (SECURE):",
+              "Google Apps Script triggered successfully (SECURE - Secreto en body):",
               scriptResult
             );
           } else {
             console.error(
-              "Error triggering Google Apps Script (SECURE):",
+              "Error triggering Google Apps Script (SECURE - Secreto en body):",
               response.status,
               response.statusText
             );
-            // Optionally handle the error, maybe log it or return a specific message
+            // Optionally handle the error
           }
         } catch (error) {
           console.error(
-            "Error sending request to Google Apps Script (SECURE):",
+            "Error sending request to Google Apps Script (SECURE - Secreto en body):",
             error
           );
           // Optionally handle the error
@@ -257,7 +250,10 @@ export async function POST(req) {
       );
     }
   } catch (error) {
-    console.error("POST Error (Update Payment Status - SECURE):", error);
+    console.error(
+      "POST Error (Update Payment Status - SECURE - Secreto en body):",
+      error
+    );
     return new NextResponse(
       JSON.stringify({ error: error.message, stack: error.stack }),
       {
