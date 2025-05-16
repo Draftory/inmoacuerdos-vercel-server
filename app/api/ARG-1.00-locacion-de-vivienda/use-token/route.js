@@ -194,7 +194,7 @@ export async function POST(req) {
         `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
       );
 
-      // --- Trigger Google Apps Script function ---
+      // --- Trigger Google Apps Script function (Don't wait for full completion) ---
       if (
         APPS_SCRIPT_URL &&
         VERCEL_API_SECRET &&
@@ -204,59 +204,51 @@ export async function POST(req) {
         sheetName &&
         rowIndex
       ) {
-        try {
-          const response = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              secret: VERCEL_API_SECRET, // Include the secret in the body
-              spreadsheetId: spreadsheetId,
-              sheetName: sheetName,
-              rowNumber: rowIndex,
-              rowData: rowDataToPass,
-              headers: headerRow,
-            }),
-          });
-
-          if (response.ok) {
-            const scriptResult = await response.json();
-            console.log(
-              "Google Apps Script triggered successfully (from Token Payment):",
-              scriptResult
-            );
-          } else {
-            console.error(
-              "Error triggering Google Apps Script (from Token Payment):",
-              response.status,
-              response.statusText
-            );
-            // Optionally handle the error
-          }
-        } catch (error) {
+        fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            secret: VERCEL_API_SECRET,
+            spreadsheetId: spreadsheetId,
+            sheetName: sheetName,
+            rowNumber: rowIndex,
+            rowData: rowDataToPass,
+            headers: headerRow,
+          }),
+        }).catch((error) => {
           console.error(
-            "Error sending request to Google Apps Script (from Token Payment):",
+            "Error triggering Google Apps Script (non-blocking):",
             error
           );
-          // Optionally handle the error
-        }
+          // Log the error, but don't block the response to the frontend
+        });
+        console.log("Google Apps Script trigger initiated (non-blocking).");
       } else {
         console.warn(
-          "Missing configuration or data to trigger generateDocumentsForRow from Token Payment."
+          "Missing configuration to trigger generateDocumentsForRow."
         );
       }
       // --- End Trigger ---
 
       return new NextResponse(
         JSON.stringify({
-          message: "Payment details updated successfully.",
+          message:
+            "Payment details updated successfully. Document generation initiated.",
           paymentId: paymentId,
           fechaDePago: nowArgentina,
         }),
         {
           status: 200,
-          headers: headers,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
+              ? origin
+              : allowedOrigins[0],
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
         }
       );
     } else {
