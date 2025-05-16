@@ -195,6 +195,7 @@ export async function POST(req) {
       );
 
       // --- Trigger Google Apps Script function ---
+      let appScriptPromise;
       if (
         APPS_SCRIPT_URL &&
         VERCEL_API_SECRET &&
@@ -204,7 +205,7 @@ export async function POST(req) {
         sheetName &&
         rowIndex
       ) {
-        fetch(APPS_SCRIPT_URL, {
+        appScriptPromise = fetch(APPS_SCRIPT_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -217,7 +218,13 @@ export async function POST(req) {
             rowData: rowDataToPass,
             headers: headerRow,
           }),
-        }); // Removed 'await' here
+        }).catch((error) => {
+          console.error(
+            "Error triggering Google Apps Script (non-blocking):",
+            error
+          );
+          // Log the error, but don't block the response to the frontend
+        });
         console.log("Google Apps Script trigger initiated (non-blocking).");
       } else {
         console.warn(
