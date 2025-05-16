@@ -195,17 +195,8 @@ export async function POST(req) {
       );
 
       // --- Trigger Google Apps Script function ---
-      let appScriptPromise;
-      if (
-        APPS_SCRIPT_URL &&
-        VERCEL_API_SECRET &&
-        rowDataToPass &&
-        headerRow &&
-        spreadsheetId &&
-        sheetName &&
-        rowIndex
-      ) {
-        appScriptPromise = fetch(APPS_SCRIPT_URL, {
+      if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
+        fetch(APPS_SCRIPT_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -223,12 +214,11 @@ export async function POST(req) {
             "Error triggering Google Apps Script (non-blocking):",
             error
           );
-          // Log the error, but don't block the response to the frontend
         });
         console.log("Google Apps Script trigger initiated (non-blocking).");
       } else {
         console.warn(
-          "Missing configuration or data to trigger generateDocumentsForRow from Token Payment."
+          "APPS_SCRIPT_URL or VERCEL_API_SECRET environment variable not set. Skipping trigger of generateDocumentsForRow."
         );
       }
       // --- End Trigger ---
