@@ -7,9 +7,6 @@ const allowedOrigins = [
   "https://inmoacuerdos.webflow.io",
 ];
 
-const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
-const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET;
-
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
   const headers = {
@@ -36,20 +33,6 @@ export async function POST(req) {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
-
-  // --- Security Check ---
-  if (!VERCEL_API_SECRET) {
-    console.error(
-      "Error: VERCEL_API_SECRET environment variable is not set in Vercel."
-    );
-    return new NextResponse(
-      JSON.stringify({ error: "Server configuration error." }),
-      {
-        status: 500,
-        headers: headers,
-      }
-    );
-  }
 
   try {
     const { contractID, memberstackID } = await req.json();
@@ -114,7 +97,6 @@ export async function POST(req) {
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const statusColumnIndex = headerRow.indexOf("status"); // Assuming you have a 'status' column
 
     if (contractIDColumnIndex === -1) {
       throw new Error("contractID column not found in the header.");
@@ -134,9 +116,6 @@ export async function POST(req) {
     if (fechaDePagoColumnIndex === -1) {
       throw new Error("fechaDePago column not found in the header.");
     }
-    if (statusColumnIndex === -1) {
-      console.warn("Warning: status column not found in the header.");
-    }
 
     // Retrieve all rows to search for matching contractID and MemberstackID
     const allRowsResponse = await sheets.spreadsheets.values.get({
@@ -148,14 +127,12 @@ export async function POST(req) {
 
     // Find the row with the matching contractID and MemberstackID
     let rowIndex = -1;
-    let rowDataToPass;
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
         allRows[i][memberstackIDColumnIndex] === memberstackID
       ) {
         rowIndex = i + 1; // +1 to account for header row and 1-based indexing
-        rowDataToPass = allRows[i];
         break;
       }
     }
@@ -174,9 +151,6 @@ export async function POST(req) {
       updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
       updatedRowValues[paymentIdColumnIndex] = paymentId;
       updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
-      if (statusColumnIndex !== -1) {
-        updatedRowValues[statusColumnIndex] = "Contrato"; // Or your desired status
-      }
 
       const lastColumnLetter = getColumnLetter(updatedRowValues.length);
 
@@ -193,48 +167,9 @@ export async function POST(req) {
       console.log(
         `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
       );
-
-      // --- Trigger Google Apps Script function ---
-      if (
-        APPS_SCRIPT_URL &&
-        VERCEL_API_SECRET &&
-        rowDataToPass &&
-        headerRow &&
-        spreadsheetId &&
-        sheetName &&
-        rowIndex
-      ) {
-        fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            secret: VERCEL_API_SECRET, // Include the secret in the body
-            spreadsheetId: spreadsheetId,
-            sheetName: sheetName,
-            rowNumber: rowIndex,
-            rowData: rowDataToPass,
-            headers: headerRow,
-          }),
-        }).catch((error) => {
-          console.error(
-            "Error triggering Google Apps Script (non-blocking):",
-            error
-          );
-        });
-        console.log("Google Apps Script trigger initiated (non-blocking).");
-      } else {
-        console.warn(
-          "Missing configuration or data to trigger generateDocumentsForRow from Token Payment."
-        );
-      }
-      // --- End Trigger ---
-
       return new NextResponse(
         JSON.stringify({
-          message:
-            "Payment details updated successfully. Document generation initiated.",
+          message: "Payment details updated successfully.",
           paymentId: paymentId,
           fechaDePago: nowArgentina,
         }),
