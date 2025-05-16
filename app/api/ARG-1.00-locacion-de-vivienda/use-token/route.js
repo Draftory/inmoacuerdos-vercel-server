@@ -38,6 +38,15 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
+  // 🔒 Verificación del token de autorización
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || authHeader !== `Bearer ${VERCEL_API_SECRET}`) {
+    return new NextResponse(JSON.stringify({ error: "Unauthorized request" }), {
+      status: 401,
+      headers,
+    });
+  }
+
   if (!VERCEL_API_SECRET) {
     console.error("Error: VERCEL_API_SECRET not set");
     return new NextResponse(JSON.stringify({ error: "Server config error" }), {
@@ -152,14 +161,13 @@ export async function POST(req) {
         `Row ${rowIndex} updated for contractID=${contractID}, memberstackID=${memberstackID}`
       );
 
-      // Respond immediately to avoid timeout
       const responsePayload = {
         message: "Payment details updated successfully.",
         paymentId,
         fechaDePago: nowArgentina,
       };
 
-      // Trigger Google Apps Script in background
+      // Trigger Google Apps Script en background
       if (
         APPS_SCRIPT_URL &&
         rowDataToPass &&
@@ -192,7 +200,7 @@ export async function POST(req) {
           } catch (err) {
             console.error("❌ Error triggering Apps Script:", err);
           }
-        }, 1000); // Delay 1s to ensure main response is sent
+        }, 1000);
       } else {
         console.warn("Missing info for Apps Script trigger.");
       }
