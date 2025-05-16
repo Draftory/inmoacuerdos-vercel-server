@@ -194,7 +194,7 @@ export async function POST(req) {
         `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
       );
 
-      // --- Trigger Google Apps Script function (Don't wait for full completion) ---
+      // --- Trigger Google Apps Script function ---
       if (
         APPS_SCRIPT_URL &&
         VERCEL_API_SECRET &&
@@ -210,45 +210,31 @@ export async function POST(req) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            secret: VERCEL_API_SECRET,
+            secret: VERCEL_API_SECRET, // Include the secret in the body
             spreadsheetId: spreadsheetId,
             sheetName: sheetName,
             rowNumber: rowIndex,
             rowData: rowDataToPass,
             headers: headerRow,
           }),
-        }).catch((error) => {
-          console.error(
-            "Error triggering Google Apps Script (non-blocking):",
-            error
-          );
-          // Log the error, but don't block the response to the frontend
-        });
+        }); // Removed 'await' here
         console.log("Google Apps Script trigger initiated (non-blocking).");
       } else {
         console.warn(
-          "Missing configuration to trigger generateDocumentsForRow."
+          "Missing configuration or data to trigger generateDocumentsForRow from Token Payment."
         );
       }
       // --- End Trigger ---
 
       return new NextResponse(
         JSON.stringify({
-          message:
-            "Payment details updated successfully. Document generation initiated.",
+          message: "Payment details updated successfully.",
           paymentId: paymentId,
           fechaDePago: nowArgentina,
         }),
         {
           status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
-              ? origin
-              : allowedOrigins[0],
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: headers,
         }
       );
     } else {
