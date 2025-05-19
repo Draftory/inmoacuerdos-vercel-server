@@ -83,7 +83,7 @@ export async function POST(req) {
           },
         ],
         back_urls: {
-          success: "https://www.inmoacuerdos.com/pago-exitoso", // Reemplaza con tu URL de ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito
+          success: "https://www.inmoacuerdos.com/success", // Reemplaza con tu URL de ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito
           failure: "https://www.inmoacuerdos.com/pago-fallido", // Reemplaza con tu URL de fallo
           pending: "https://www.inmoacuerdos.com/pago-pendiente", // Reemplaza con tu URL de pendiente
         },
