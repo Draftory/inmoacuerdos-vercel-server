@@ -181,45 +181,48 @@ export async function POST(req) {
         `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
       );
 
-      // --- Trigger Google Apps Script function WITH secret in body ---
+      // --- Trigger Google Apps Script function WITH secret in body (ASYNC - No await) ---
       if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
-        try {
-          const response = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              secret: VERCEL_API_SECRET, // Incluir el secreto en el body
-              spreadsheetId: spreadsheetId,
-              sheetName: sheetName,
-              rowNumber: rowIndex,
-              rowData: rowDataToPass,
-              headers: headerRow,
-            }),
-          });
-
-          if (response.ok) {
-            const scriptResult = await response.json();
-            console.log(
-              "Google Apps Script triggered successfully (SECURE - Secreto en body):",
-              scriptResult
-            );
-          } else {
+        fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            secret: VERCEL_API_SECRET, // Incluir el secreto en el body
+            spreadsheetId: spreadsheetId,
+            sheetName: sheetName,
+            rowNumber: rowIndex,
+            rowData: rowDataToPass,
+            headers: headerRow,
+          }),
+        })
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            } else {
+              console.error(
+                "Error triggering Google Apps Script (ASYNC):",
+                response.status,
+                response.statusText
+              );
+              // No rechazamos la promesa aquí para no bloquear la respuesta principal
+            }
+          })
+          .then((scriptResult) => {
+            if (scriptResult) {
+              console.log(
+                "Google Apps Script triggered successfully (ASYNC):",
+                scriptResult
+              );
+            }
+          })
+          .catch((error) => {
             console.error(
-              "Error triggering Google Apps Script (SECURE - Secreto en body):",
-              response.status,
-              response.statusText
+              "Error sending request to Google Apps Script (ASYNC):",
+              error
             );
-            // Optionally handle the error
-          }
-        } catch (error) {
-          console.error(
-            "Error sending request to Google Apps Script (SECURE - Secreto en body):",
-            error
-          );
-          // Optionally handle the error
-        }
+          });
       } else {
         console.warn(
           "APPS_SCRIPT_URL or VERCEL_API_SECRET environment variable not set. Skipping trigger of generateDocumentsForRow."
