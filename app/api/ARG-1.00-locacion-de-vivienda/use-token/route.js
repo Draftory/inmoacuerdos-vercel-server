@@ -7,6 +7,10 @@ const allowedOrigins = [
   "https://inmoacuerdos.webflow.io",
 ];
 
+// Environment variables
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
+const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET; // Asegúrate de que esta variable esté definida en Vercel
+
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
   const headers = {
@@ -33,6 +37,13 @@ export async function POST(req) {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
+
+  // --- **IMPORTANT: Ensure VERCEL_API_SECRET is set in your Vercel Environment Variables** ---
+  if (!VERCEL_API_SECRET && APPS_SCRIPT_URL) {
+    console.warn(
+      "Warning: VERCEL_API_SECRET environment variable is not set in Vercel, but APPS_SCRIPT_URL is. The Google Apps Script will NOT be triggered."
+    );
+  }
 
   try {
     const { contractID, memberstackID } = await req.json();
@@ -127,12 +138,14 @@ export async function POST(req) {
 
     // Find the row with the matching contractID and MemberstackID
     let rowIndex = -1;
+    let rowDataToPass;
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
         allRows[i][memberstackIDColumnIndex] === memberstackID
       ) {
         rowIndex = i + 1; // +1 to account for header row and 1-based indexing
+        rowDataToPass = allRows[i];
         break;
       }
     }
@@ -167,6 +180,53 @@ export async function POST(req) {
       console.log(
         `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
       );
+
+      // --- Trigger Google Apps Script function WITH secret in body ---
+      if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
+        try {
+          const response = await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              secret: VERCEL_API_SECRET, // Incluir el secreto en el body
+              spreadsheetId: spreadsheetId,
+              sheetName: sheetName,
+              rowNumber: rowIndex,
+              rowData: rowDataToPass,
+              headers: headerRow,
+            }),
+          });
+
+          if (response.ok) {
+            const scriptResult = await response.json();
+            console.log(
+              "Google Apps Script triggered successfully (SECURE - Secreto en body):",
+              scriptResult
+            );
+          } else {
+            console.error(
+              "Error triggering Google Apps Script (SECURE - Secreto en body):",
+              response.status,
+              response.statusText
+            );
+            // Optionally handle the error
+          }
+        } catch (error) {
+          console.error(
+            "Error sending request to Google Apps Script (SECURE - Secreto en body):",
+            error
+          );
+          // Optionally handle the error
+        }
+      } else {
+        console.warn(
+          "APPS_SCRIPT_URL or VERCEL_API_SECRET environment variable not set. Skipping trigger of generateDocumentsForRow."
+        );
+      }
+      // --- End Trigger ---
+
       return new NextResponse(
         JSON.stringify({
           message: "Payment details updated successfully.",
