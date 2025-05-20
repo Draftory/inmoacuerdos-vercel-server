@@ -195,7 +195,7 @@ export async function POST(req) {
     }
 
     // --- **ENVIAR SOLICITUD POST A APPS SCRIPT (doPost)** ---
-    const appsScriptUrl = process.env.APPS_SCRIPT_WEB_APP_URL; // Asegúrate de tener esta variable de entorno configurada
+    const appsScriptUrl = process.env.APPS_SCRIPT_GENERATE_DOC_URL; // Asegúrate de tener esta variable de entorno configurada
 
     if (appsScriptUrl) {
       const rowDataForAppsScript = orderedValues; // Los datos que guardaste en Sheets
