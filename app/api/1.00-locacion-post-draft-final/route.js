@@ -1,19 +1,19 @@
-import { google } from 'googleapis';
-import { NextResponse } from 'next/server';
+import { google } from "googleapis";
+import { NextResponse } from "next/server";
 
 const allowedOrigins = [
-  'https://www.inmoacuerdos.com',
-  'https://inmoacuerdos.webflow.io',
+  "https://www.inmoacuerdos.com",
+  "https://inmoacuerdos.webflow.io",
 ];
 
 export async function OPTIONS(req) {
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get("origin");
   const headers = {
-    'Access-Control-Allow-Origin': allowedOrigins.includes(origin)
+    "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   return new NextResponse(null, {
@@ -23,57 +23,60 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log('Starting API request to Google Sheets');
-  const origin = req.headers.get('origin');
+  console.log("Starting API request to Google Sheets");
+  const origin = req.headers.get("origin");
   const headers = {
-    'Access-Control-Allow-Origin': allowedOrigins.includes(origin)
+    "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   try {
     const formObject = await req.json();
-    console.log('Received formObject (Server-Side):', formObject);
+    console.log("Received formObject (Server-Side):", formObject);
+    const { status } = formObject; // Extraer el status
 
     if (
       !formObject ||
-      typeof formObject !== 'object' ||
+      typeof formObject !== "object" ||
       Object.keys(formObject).length === 0
     ) {
-      throw new Error('Invalid or missing data in the request body.');
+      throw new Error("Invalid or missing data in the request body.");
     }
 
     const googleCredentialsBase64 =
       process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
 
     if (!googleCredentialsBase64) {
-      throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
+      throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
     }
 
     const googleCredentialsJson = Buffer.from(
       googleCredentialsBase64,
-      'base64'
-    ).toString('utf-8');
+      "base64"
+    ).toString("utf-8");
     const credentials = JSON.parse(googleCredentialsJson);
 
-    console.log('GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use');
+    console.log(
+      "GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use"
+    );
 
     const auth = new google.auth.GoogleAuth({
       credentials,
-      scopes: 'https://www.googleapis.com/auth/spreadsheets',
+      scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
 
     const client = await auth.getClient();
-    console.log('Authenticated with Google Sheets API');
+    console.log("Authenticated with Google Sheets API");
 
-    const sheets = google.sheets({ version: 'v4', auth: client });
+    const sheets = google.sheets({ version: "v4", auth: client });
 
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-    console.log('Spreadsheet ID:', spreadsheetId);
-    console.log('Sheet Name:', sheetName);
+    console.log("Spreadsheet ID:", spreadsheetId);
+    console.log("Sheet Name:", sheetName);
 
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -81,10 +84,10 @@ export async function POST(req) {
     });
 
     const headerRow = headerResponse.data?.values?.[0];
-    console.log('Header Row:', headerRow);
+    console.log("Header Row:", headerRow);
 
     if (!headerRow || headerRow.length === 0) {
-      throw new Error('Header row not found in the spreadsheet.');
+      throw new Error("Header row not found in the spreadsheet.");
     }
 
     const headerSet = new Set(headerRow);
@@ -98,19 +101,19 @@ export async function POST(req) {
 
     if (notFoundInSheet.length > 0) {
       console.warn(
-        'The following input names were not found in the Google Sheet header:',
+        "The following input names were not found in the Google Sheet header:",
         notFoundInSheet
       );
     }
 
-    const orderedValues = headerRow.map((header) => formObject[header] || '');
-    console.log('Ordered Values:', orderedValues);
+    const orderedValues = headerRow.map((header) => formObject[header] || "");
+    console.log("Ordered Values:", orderedValues);
 
     // Debugging logs
-    console.log('Header Row Length:', headerRow.length);
-    console.log('Ordered Values Length:', orderedValues.length);
-    console.log('Header Row:', headerRow);
-    console.log('Form Object:', formObject);
+    console.log("Header Row Length:", headerRow.length);
+    console.log("Ordered Values Length:", orderedValues.length);
+    console.log("Header Row:", headerRow);
+    console.log("Form Object:", formObject);
 
     // Add a log to display the column letter
     const lastColumnLetter = getColumnLetter(orderedValues.length);
@@ -125,14 +128,14 @@ export async function POST(req) {
     const allRows = allRowsResponse.data?.values || [];
 
     // Find the index of the contractID and MemberstackID columns
-    const contractIDColumnIndex = headerRow.indexOf('contractID');
-    const memberstackIDColumnIndex = headerRow.indexOf('MemberstackID');
+    const contractIDColumnIndex = headerRow.indexOf("contractID");
+    const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
 
     if (contractIDColumnIndex === -1) {
-      throw new Error('contractID column not found in the header.');
+      throw new Error("contractID column not found in the header.");
     }
     if (memberstackIDColumnIndex === -1) {
-      throw new Error('MemberstackID column not found in the header.');
+      throw new Error("MemberstackID column not found in the header.");
     }
 
     // Search for the row with the matching contractID and MemberstackID
@@ -153,12 +156,12 @@ export async function POST(req) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
-        valueInputOption: 'RAW',
+        valueInputOption: "RAW",
         requestBody: {
           values: [orderedValues],
         },
       });
-      console.log('Row updated successfully');
+      console.log("Row updated successfully");
     } else {
       // Check if a row with the contractID exists
       let contractIDExists = false;
@@ -171,7 +174,7 @@ export async function POST(req) {
 
       if (contractIDExists) {
         return new NextResponse(
-          JSON.stringify({ error: 'ContractID already exists.' }),
+          JSON.stringify({ error: "ContractID already exists." }),
           {
             status: 409, // Conflict status code
             headers: headers,
@@ -183,18 +186,60 @@ export async function POST(req) {
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: `${sheetName}!A:${lastColumnLetter}`,
-        valueInputOption: 'RAW',
+        valueInputOption: "RAW",
         requestBody: {
           values: [orderedValues],
         },
       });
-      console.log('New row added successfully');
+      console.log("New row added successfully");
+    }
+
+    // --- **ENVIAR SOLICITUD POST A APPS SCRIPT (doPost)** ---
+    const appsScriptUrl = process.env.APPS_SCRIPT_WEB_APP_URL; // Asegúrate de tener esta variable de entorno configurada
+
+    if (appsScriptUrl) {
+      const rowDataForAppsScript = orderedValues; // Los datos que guardaste en Sheets
+      const postToAppsScript = {
+        spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
+        sheetName: process.env.LOCACION_POST_DATABASE_SHEET_NAME,
+        rowNumber: rowIndex !== -1 ? rowIndex : allRows.length + 1, // Pasar el número de fila
+        rowData: rowDataForAppsScript,
+        headers: headerRow,
+        status: status, // Pasar el status
+        secret: process.env.APPS_SCRIPT_SECRET, // Si tienes un secreto para proteger tu Web App
+      };
+
+      console.log("Sending POST request to Apps Script:", postToAppsScript);
+
+      const appsScriptResponse = await fetch(appsScriptUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(postToAppsScript),
+      });
+
+      if (appsScriptResponse.ok) {
+        const appsScriptResult = await appsScriptResponse.json();
+        console.log("Apps Script response:", appsScriptResult);
+      } else {
+        console.error(
+          "Error sending request to Apps Script:",
+          appsScriptResponse.statusText
+        );
+      }
+    } else {
+      console.warn(
+        "APPS_SCRIPT_WEB_APP_URL not configured. Skipping request to Apps Script."
+      );
     }
 
     return new NextResponse(
       JSON.stringify({
         message:
-          rowIndex !== -1 ? 'Row updated successfully.' : 'New row added successfully.',
+          rowIndex !== -1
+            ? "Row updated successfully."
+            : "New row added successfully.",
       }),
       {
         status: 200,
@@ -202,7 +247,7 @@ export async function POST(req) {
       }
     );
   } catch (error) {
-    console.error('POST Error:', error);
+    console.error("POST Error:", error);
     return new NextResponse(
       JSON.stringify({ error: error.message, stack: error.stack }),
       {
@@ -215,7 +260,7 @@ export async function POST(req) {
 
 // Function to convert column number to letter
 function getColumnLetter(columnNumber) {
-  let columnLetter = '';
+  let columnLetter = "";
   let temp = columnNumber;
   while (temp > 0) {
     const remainder = (temp - 1) % 26;
