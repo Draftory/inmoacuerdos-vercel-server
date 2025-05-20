@@ -195,9 +195,10 @@ export async function POST(req) {
     }
 
     // --- **ENVIAR SOLICITUD POST A APPS SCRIPT (doPost)** ---
-    const appsScriptUrl = process.env.APPS_SCRIPT_GENERATE_DOC_URL; // Asegúrate de tener esta variable de entorno configurada
+    const appsScriptUrl = process.env.APPS_SCRIPT_GENERATE_DOC_URL; // Using the correct environment variable name
+    const vercelSecret = process.env.VERCEL_API_SECRET; // Using the correct environment variable name
 
-    if (appsScriptUrl) {
+    if (appsScriptUrl && vercelSecret) {
       const rowDataForAppsScript = orderedValues; // Los datos que guardaste en Sheets
       const postToAppsScript = {
         spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
@@ -206,7 +207,7 @@ export async function POST(req) {
         rowData: rowDataForAppsScript,
         headers: headerRow,
         status: status, // Pasar el status
-        secret: process.env.APPS_SCRIPT_SECRET, // Si tienes un secreto para proteger tu Web App
+        secret: vercelSecret, // Pasar el secreto de Vercel
       };
 
       console.log("Sending POST request to Apps Script:", postToAppsScript);
@@ -227,10 +228,12 @@ export async function POST(req) {
           "Error sending request to Apps Script:",
           appsScriptResponse.statusText
         );
+        const errorBody = await appsScriptResponse.text();
+        console.error("Apps Script error body:", errorBody);
       }
     } else {
       console.warn(
-        "APPS_SCRIPT_WEB_APP_URL not configured. Skipping request to Apps Script."
+        "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured. Skipping request to Apps Script."
       );
     }
 
