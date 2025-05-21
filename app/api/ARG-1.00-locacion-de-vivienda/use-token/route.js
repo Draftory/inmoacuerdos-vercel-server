@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import fetch from "node-fetch"; // Or your preferred HTTP library
+import { v4 as uuidv4 } from "uuid"; // Import uuidv4
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
