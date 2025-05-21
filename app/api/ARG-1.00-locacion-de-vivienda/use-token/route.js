@@ -211,24 +211,24 @@ export async function POST(req) {
             const pdfUrl = appsScriptResponseData?.pdfUrl;
             const docUrl = appsScriptResponseData?.docUrl;
 
-            // --- Update Google Sheets with document links ---
+            // --- Update Google Sheets with document links (CORRECTED ORDER) ---
             if (
               pdfUrl &&
               docUrl &&
               pdfFileColumnIndex !== -1 &&
               docFileColumnIndex !== -1
             ) {
-              const updateLinksRange = `${sheetName}!${getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}:${getColumnLetter(docFileColumnIndex + 1)}${rowIndex}`;
+              const updateLinksRange = `${sheetName}!${getColumnLetter(docFileColumnIndex + 1)}${rowIndex}:${getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
               await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: updateLinksRange,
                 valueInputOption: "RAW",
-                requestBody: { values: [[pdfUrl, docUrl]] },
+                requestBody: { values: [[docUrl, pdfUrl]] },
               });
-              console.log("Google Sheets updated with PDF and DOC links.");
+              console.log("Google Sheets updated with DOC and PDF links.");
             }
 
-            // --- Interact with Webflow API ---
+            // --- Interact with Webflow API (REPLICATING OTHER ENDPOINT'S APPROACH) ---
             const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
             if (
               webflowApiToken &&
