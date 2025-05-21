@@ -306,7 +306,6 @@ export async function POST(req) {
 }
 
 function mapFormDataToWebflowFields(formData) {
-  const contractIDValue = formData["contractID"] || "";
   return {
     editlink: "", // Will be set in the main POST function
     denominacionlegallocadorpj1:
@@ -316,8 +315,8 @@ function mapFormDataToWebflowFields(formData) {
     status: formData["status"] || null,
     contrato: formData["Contrato"] || null,
     memberstackid: formData["MemberstackID"] || null,
-    name: contractIDValue, // Ensure name is a string (contractID)
-    slug: contractIDValue, // Ensure slug is a string (contractID)
+    name: formData["contractID"] || "", // Directly use formData['contractID']
+    slug: formData["contractID"] || "", // Directly use formData['contractID']
     domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
     ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
     nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
