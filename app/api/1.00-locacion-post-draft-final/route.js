@@ -38,6 +38,7 @@ export async function POST(req) {
     const formObject = await req.json();
     console.log("Received formObject (Server-Side):", formObject);
     const { contractID, status, ...formData } = formObject;
+    console.log("Extracted formData:", formData);
 
     if (
       !formObject ||
