@@ -145,23 +145,17 @@ export async function POST(req) {
     const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
     if (webflowApiToken) {
       const webflowCollectionId = process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
+      const itemNameFieldSlug = "name";
 
-      const listItemsResponse = await fetch(
-        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`,
-        {
-          method: "POST", // Use POST for filtering
-          headers: {
-            Authorization: `Bearer ${webflowApiToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            filter: {
-              field: "name", // Assuming 'name' is the field slug you want to filter by
-              isEqualTo: contractID,
-            },
-          }),
-        }
+      const filterUrl = new URL(
+        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`
       );
+      filterUrl.searchParams.set(itemNameFieldSlug, contractID);
+
+      const listItemsResponse = await fetch(filterUrl.toString(), {
+        method: "GET",
+        headers: { Authorization: `Bearer ${webflowApiToken}` },
+      });
       const listItemsData = await listItemsResponse.json();
       const existingItem = listItemsData.items?.[0];
 
