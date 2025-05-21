@@ -166,6 +166,8 @@ export async function POST(req) {
       };
 
       let webflowResponse;
+      const requestBody = { fields: webflowFields }; // Wrap fieldData in 'fields' for v2
+
       if (existingItem) {
         webflowResponse = await fetch(
           `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}`,
@@ -175,7 +177,7 @@ export async function POST(req) {
               Authorization: `Bearer ${webflowApiToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ fields: webflowFields }),
+            body: JSON.stringify(requestBody),
           }
         );
       } else {
@@ -187,7 +189,7 @@ export async function POST(req) {
               Authorization: `Bearer ${webflowApiToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ fields: webflowFields }),
+            body: JSON.stringify(requestBody),
           }
         );
       }
