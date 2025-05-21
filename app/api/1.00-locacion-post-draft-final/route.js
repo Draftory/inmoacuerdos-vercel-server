@@ -312,7 +312,7 @@ function mapFormDataToWebflowFields(formData) {
       formData["denominacionLegalLocadorPJ1"] || null,
     nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
     timestamp: formData["timestamp"] || null,
-    status: formData["status"] || null,
+    status: formData["status"] || null, // Map 'status'
     contrato: formData["Contrato"] || null,
     memberstackid: formData["MemberstackID"] || null,
     name: formData["contractID"] || "", // Directly use formData['contractID']
@@ -326,8 +326,8 @@ function mapFormDataToWebflowFields(formData) {
       formData["hiddenInputLocacionFechaInicio"] || null,
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"] || null,
-    pdffile: null,
-    docfile: null,
+    pdffile: formData["pdffile"] || null, // Map 'pdffile'
+    docfile: formData["docfile"] || null, // Map 'docfile'
   };
 }
 
