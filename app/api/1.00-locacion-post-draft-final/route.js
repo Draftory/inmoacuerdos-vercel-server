@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
+import fetch from "node-fetch"; // Or your preferred HTTP library
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -23,7 +24,7 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log("Starting API request to Google Sheets");
+  console.log("Starting API request to handle contract data");
   const origin = req.headers.get("origin");
   const headers = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
@@ -36,7 +37,7 @@ export async function POST(req) {
   try {
     const formObject = await req.json();
     console.log("Received formObject (Server-Side):", formObject);
-    const { status } = formObject; // Extraer el status
+    const { contractID, status, ...formData } = formObject;
 
     if (
       !formObject ||
@@ -45,6 +46,9 @@ export async function POST(req) {
     ) {
       throw new Error("Invalid or missing data in the request body.");
     }
+
+    // --- 1. Generate Edit Link ---
+    const editLink = `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`;
 
     const googleCredentialsBase64 =
       process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
@@ -59,209 +63,257 @@ export async function POST(req) {
     ).toString("utf-8");
     const credentials = JSON.parse(googleCredentialsJson);
 
-    console.log(
-      "GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use"
-    );
-
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
 
     const client = await auth.getClient();
-    console.log("Authenticated with Google Sheets API");
-
     const sheets = google.sheets({ version: "v4", auth: client });
 
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-    console.log("Spreadsheet ID:", spreadsheetId);
-    console.log("Sheet Name:", sheetName);
 
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!1:1`,
     });
-
-    const headerRow = headerResponse.data?.values?.[0];
-    console.log("Header Row:", headerRow);
-
-    if (!headerRow || headerRow.length === 0) {
-      throw new Error("Header row not found in the spreadsheet.");
-    }
-
+    const headerRow = headerResponse.data?.values?.[0] || [];
     const headerSet = new Set(headerRow);
-    const notFoundInSheet = [];
-
-    for (const key in formObject) {
-      if (!headerSet.has(key)) {
-        notFoundInSheet.push(key);
-      }
-    }
-
-    if (notFoundInSheet.length > 0) {
-      console.warn(
-        "The following input names were not found in the Google Sheet header:",
-        notFoundInSheet
-      );
-    }
-
     const orderedValues = headerRow.map((header) => formObject[header] || "");
-    console.log("Ordered Values:", orderedValues);
 
-    // Debugging logs
-    console.log("Header Row Length:", headerRow.length);
-    console.log("Ordered Values Length:", orderedValues.length);
-    console.log("Header Row:", headerRow);
-    console.log("Form Object:", formObject);
+    // Find the index of the 'Editlink' column
+    const editLinkColumnIndex = headerRow.indexOf("Editlink");
+    const valuesToWrite = [...orderedValues];
+    if (editLinkColumnIndex !== -1) {
+      valuesToWrite[editLinkColumnIndex] = editLink;
+    } else {
+      // If 'Editlink' column doesn't exist, you might want to handle this differently
+      console.warn("Warning: 'Editlink' column not found in the sheet header.");
+      valuesToWrite.push(editLink); // Append to the end
+    }
+    const lastColumnLetter = getColumnLetter(valuesToWrite.length);
 
-    // Add a log to display the column letter
-    const lastColumnLetter = getColumnLetter(orderedValues.length);
-    console.log(`Writing up to column: ${lastColumnLetter}`);
-
-    // Retrieve all rows to search for contractID
+    // --- Save to Google Sheets (including editLink) ---
+    let rowIndex = -1;
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`,
+      range: `${sheetName}!A:VM`, // Adjust range as needed
     });
-
     const allRows = allRowsResponse.data?.values || [];
-
-    // Find the index of the contractID and MemberstackID columns
     const contractIDColumnIndex = headerRow.indexOf("contractID");
     const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
 
-    if (contractIDColumnIndex === -1) {
-      throw new Error("contractID column not found in the header.");
-    }
-    if (memberstackIDColumnIndex === -1) {
-      throw new Error("MemberstackID column not found in the header.");
-    }
-
-    // Search for the row with the matching contractID and MemberstackID
-    let rowIndex = -1;
-    for (let i = 1; i < allRows.length; i++) {
-      // Start from 1 to skip header
-      if (
-        allRows[i][contractIDColumnIndex] === formObject.contractID &&
-        allRows[i][memberstackIDColumnIndex] === formObject.MemberstackID
-      ) {
-        rowIndex = i + 1; // +1 to account for header row and 1-based indexing
-        break;
-      }
-    }
-
-    if (rowIndex !== -1) {
-      // Update existing row
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [orderedValues],
-        },
-      });
-      console.log("Row updated successfully");
-    } else {
-      // Check if a row with the contractID exists
-      let contractIDExists = false;
+    if (contractIDColumnIndex !== -1 && memberstackIDColumnIndex !== -1) {
       for (let i = 1; i < allRows.length; i++) {
-        if (allRows[i][contractIDColumnIndex] === formObject.contractID) {
-          contractIDExists = true;
+        if (
+          allRows[i][contractIDColumnIndex] === formObject.contractID &&
+          allRows[i][memberstackIDColumnIndex] === formObject.MemberstackID
+        ) {
+          rowIndex = i + 1;
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
+            valueInputOption: "RAW",
+            requestBody: { values: [valuesToWrite] },
+          });
+          console.log("Row updated successfully (including editLink)");
           break;
         }
       }
+      if (rowIndex === -1) {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: `${sheetName}!A:${lastColumnLetter}`,
+          valueInputOption: "RAW",
+          requestBody: { values: [valuesToWrite] },
+        });
+        console.log("New row added successfully (including editLink)");
+        rowIndex = allRows.length + 1; // Approximate new row index
+      }
+    } else {
+      console.error(
+        "contractID or MemberstackID column not found, cannot update/append."
+      );
+      return new NextResponse(
+        JSON.stringify({ error: "Could not update/append row." }),
+        { status: 500 }
+      );
+    }
 
-      if (contractIDExists) {
-        return new NextResponse(
-          JSON.stringify({ error: "ContractID already exists." }),
+    // --- Interact with Webflow API ---
+    const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
+    if (webflowApiToken) {
+      const webflowCollectionId = process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
+      const itemNameFieldSlug = "name";
+
+      const listItemsResponse = await fetch(
+        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items?${itemNameFieldSlug}=${contractID}`,
+        {
+          headers: {
+            Authorization: `Bearer ${webflowApiToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      const listItemsData = await listItemsResponse.json();
+      const existingItem = listItemsData.items?.[0];
+
+      const webflowFields = {
+        name: contractID,
+        slug: contractID,
+        editlink: editLink,
+        ...mapFormDataToWebflowFields(formData),
+      };
+
+      let webflowResponse;
+      if (existingItem) {
+        webflowResponse = await fetch(
+          `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}`,
           {
-            status: 409, // Conflict status code
-            headers: headers,
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${webflowApiToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ fields: webflowFields }),
+          }
+        );
+      } else {
+        webflowResponse = await fetch(
+          `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${webflowApiToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ fields: webflowFields }),
           }
         );
       }
 
-      // Append new row
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${sheetName}!A:${lastColumnLetter}`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [orderedValues],
-        },
-      });
-      console.log("New row added successfully");
-    }
+      const webflowResult = await webflowResponse.json();
+      console.log("Webflow API Response:", webflowResult);
 
-    // --- **ENVIAR SOLICITUD POST A APPS SCRIPT (doPost)** ---
-    const appsScriptUrl = process.env.APPS_SCRIPT_GENERATE_DOC_URL; // Using the correct environment variable name
-    const vercelSecret = process.env.VERCEL_API_SECRET; // Using the correct environment variable name
-
-    if (appsScriptUrl && vercelSecret) {
-      const rowDataForAppsScript = orderedValues; // Los datos que guardaste en Sheets
-      const postToAppsScript = {
-        spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
-        sheetName: process.env.LOCACION_POST_DATABASE_SHEET_NAME,
-        rowNumber: rowIndex !== -1 ? rowIndex : allRows.length + 1, // Pasar el número de fila
-        rowData: rowDataForAppsScript,
-        headers: headerRow,
-        status: status, // Pasar el status
-        secret: vercelSecret, // Pasar el secreto de Vercel
-      };
-
-      console.log("Sending POST request to Apps Script:", postToAppsScript);
-
-      const appsScriptResponse = await fetch(appsScriptUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(postToAppsScript),
-      });
-
-      if (appsScriptResponse.ok) {
-        const appsScriptResult = await appsScriptResponse.json();
-        console.log("Apps Script response:", appsScriptResult);
-      } else {
-        console.error(
-          "Error sending request to Apps Script:",
-          appsScriptResponse.statusText
-        );
-        const errorBody = await appsScriptResponse.text();
-        console.error("Apps Script error body:", errorBody);
+      if (!webflowResponse.ok) {
+        console.error("Error interacting with Webflow API:", webflowResult);
+        // Consider how to handle Webflow API errors
       }
     } else {
-      console.warn(
-        "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured. Skipping request to Apps Script."
-      );
+      console.warn("WEBFLOW_API_TOKEN not configured.");
+    }
+
+    // --- Call Apps Script for document generation (if "Contrato") ---
+    let appsScriptResponseData = {};
+    if (status === "Contrato") {
+      const appsScriptUrl = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
+      const vercelSecret = process.env.VERCEL_API_SECRET;
+      if (appsScriptUrl && vercelSecret) {
+        const dataToSendToAppsScript = {
+          spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
+          sheetName: process.env.LOCACION_POST_DATABASE_SHEET_NAME,
+          rowNumber: rowIndex,
+          rowData: orderedValues,
+          headers: headerRow,
+          status: status,
+          secret: vercelSecret,
+        };
+        console.log(
+          "Sending request to Apps Script for document generation:",
+          dataToSendToAppsScript
+        );
+        const appsScriptResponse = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(dataToSendToAppsScript),
+        });
+        if (appsScriptResponse.ok) {
+          appsScriptResponseData = await appsScriptResponse.json();
+          console.log("Apps Script response:", appsScriptResponseData);
+        } else {
+          console.error(
+            "Error calling Apps Script:",
+            appsScriptResponse.statusText,
+            await appsScriptResponse.text()
+          );
+          // Consider how to handle Apps Script errors
+        }
+      } else {
+        console.warn(
+          "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured for document generation."
+        );
+      }
+    }
+
+    // --- Send Email via Resend (if "Contrato") ---
+    if (status === "Contrato") {
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (
+        resendApiKey &&
+        appsScriptResponseData?.pdfUrl &&
+        appsScriptResponseData?.docUrl
+      ) {
+        const emailData = {
+          to: formObject.emailMember || formObject.emailGuest, // Adjust recipient logic
+          from: process.env.RESEND_EMAIL_FROM,
+          subject: "Your Document is Ready!",
+          html: `<p>Here are the links to your documents:</p>
+                 <p><a href="${appsScriptResponseData.pdfUrl}">View PDF</a></p>
+                 <p><a href="${appsScriptResponseData.docUrl}">View DOC</a></p>`,
+        };
+        console.log("Sending email via Resend:", emailData);
+        const resendResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(emailData),
+        });
+        const resendResult = await resendResponse.json();
+        console.log("Resend API Response:", resendResult);
+        if (!resendResponse.ok) {
+          console.error("Error sending email via Resend:", resendResult);
+          // Consider how to handle Resend API errors
+        }
+      } else {
+        console.warn("RESEND_API_KEY not configured or document URLs missing.");
+      }
     }
 
     return new NextResponse(
-      JSON.stringify({
-        message:
-          rowIndex !== -1
-            ? "Row updated successfully."
-            : "New row added successfully.",
-      }),
-      {
-        status: 200,
-        headers: headers,
-      }
+      JSON.stringify({ message: "Contract data processed successfully." }),
+      { status: 200 }
     );
   } catch (error) {
-    console.error("POST Error:", error);
-    return new NextResponse(
-      JSON.stringify({ error: error.message, stack: error.stack }),
-      {
-        status: 500,
-        headers: headers,
-      }
-    );
+    console.error("Error in Vercel POST:", error);
+    return new NextResponse(JSON.stringify({ error: error.message }), {
+      status: 500,
+    });
   }
 }
 
-// Function to convert column number to letter
+function mapFormDataToWebflowFields(formData) {
+  return {
+    domicilioinmueblelocado: formData["domicilioInmuebleLocado"],
+    ciudadinmueblelocado: formData["ciudadInmuebleLocado"],
+    nombrelocadorpf1: formData["nombreLocadorPF1"],
+    denominacionlegallocadorpj1: formData["denominacionLegalLocadorPJ1"],
+    nombrelocatariopf1: formData["nombreLocatarioPF1"],
+    denominacionlegallocatariopj1: formData["denominacionLegalLocatarioPJ1"],
+    hiddeninputlocacionfechainicio: formData["hiddenInputLocacionFechaInicio"],
+    hiddeninputlocacionfechatermino:
+      formData["hiddenInputLocacionFechaTermino"],
+    timestamp: formData["timestamp"],
+    contrato: formData["Contrato"],
+    memberstackid: formData["MemberstackID"],
+    emailmember: formData["emailMember"],
+    emailguest: formData["emailGuest"],
+    // Add other mappings as needed
+  };
+}
+
 function getColumnLetter(columnNumber) {
   let columnLetter = "";
   let temp = columnNumber;
