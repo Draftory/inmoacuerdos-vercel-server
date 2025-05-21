@@ -162,17 +162,32 @@ export async function POST(req) {
       fieldData.editlink = editLink; // Ensure editlink is set
 
       let webflowResponse;
-      const requestBody = {
-        fieldData: fieldData,
-        isArchived: false,
-        isDraft: false,
-      };
-
+      let requestBody;
       const updateUrl = existingItem
         ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
-        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well, to match potential implicit behavior of Apps Script
+        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well
 
       const method = existingItem ? "PATCH" : "POST";
+
+      if (method === "POST") {
+        // Try sending as an 'items' array for create, as the error suggests
+        requestBody = {
+          items: [
+            {
+              fieldData: fieldData,
+              isArchived: false,
+              isDraft: false,
+            },
+          ],
+        };
+      } else {
+        // For update, use the fieldData directly
+        requestBody = {
+          fieldData: fieldData,
+          isArchived: false,
+          isDraft: false,
+        };
+      }
 
       console.log(
         `Webflow ${method} Request Body:`,
@@ -290,6 +305,7 @@ export async function POST(req) {
 }
 
 function mapFormDataToWebflowFields(formData) {
+  const contractIDValue = formData["contractID"] || "";
   return {
     editlink: "", // Will be set in the main POST function
     denominacionlegallocadorpj1:
@@ -299,8 +315,8 @@ function mapFormDataToWebflowFields(formData) {
     status: formData["status"] || null,
     contrato: formData["Contrato"] || null,
     memberstackid: formData["MemberstackID"] || null,
-    name: formData["contractID"] || null,
-    slug: formData["contractID"] || null, // Ensure slug is included
+    name: contractIDValue, // Ensure name is a string (contractID)
+    slug: contractIDValue, // Ensure slug is a string (contractID)
     domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
     ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
     nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
@@ -310,8 +326,8 @@ function mapFormDataToWebflowFields(formData) {
       formData["hiddenInputLocacionFechaInicio"] || null,
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"] || null,
-    pdffile: null, // Explicitly set to null to match Apps Script if it was
-    docfile: null, // Explicitly set to null to match Apps Script if it was
+    pdffile: null,
+    docfile: null,
   };
 }
 
