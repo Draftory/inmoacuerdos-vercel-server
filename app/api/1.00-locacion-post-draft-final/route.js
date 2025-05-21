@@ -88,7 +88,6 @@ export async function POST(req) {
     if (editLinkColumnIndex !== -1) {
       valuesToWrite[editLinkColumnIndex] = editLink;
     } else {
-      // If 'Editlink' column doesn't exist, you might want to handle this differently
       console.warn("Warning: 'Editlink' column not found in the sheet header.");
       valuesToWrite.push(editLink); // Append to the end
     }
@@ -306,8 +305,13 @@ function mapFormDataToWebflowFields(formData) {
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"],
     timestamp: formData["timestamp"],
+    pdffile: "", // These will likely be updated later, or might not be needed in Webflow directly
+    docfile: "",
+    status: formData["status"],
+    editlink: "", // This will be set directly in the main POST function
     contrato: formData["Contrato"],
     memberstackid: formData["MemberstackID"],
+    name: formData["contractID"], // 'name' field in Webflow is set to contractID
     emailmember: formData["emailMember"],
     emailguest: formData["emailGuest"],
     // Add other mappings as needed
