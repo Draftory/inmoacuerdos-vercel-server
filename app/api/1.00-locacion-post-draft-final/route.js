@@ -26,7 +26,8 @@ export async function OPTIONS(req) {
 export async function POST(req) {
   console.log("Starting API request to handle contract data");
   const origin = req.headers.get("origin");
-  const headers = {
+  const responseHeaders = {
+    // Create headers object for the response
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
@@ -137,7 +138,7 @@ export async function POST(req) {
       );
       return new NextResponse(
         JSON.stringify({ error: "Could not update/append row." }),
-        { status: 500 }
+        { status: 500, headers: responseHeaders }
       );
     }
 
@@ -163,7 +164,7 @@ export async function POST(req) {
       const existingItem = listItemsData.items?.[0];
 
       const fieldData = mapFormDataToWebflowFields(formData);
-      fieldData.editlink = editLink; // Ensure editlink is set
+      fieldData.editlink = editLink; // Ensure 'editlink' is set
       fieldData.name = contractID; // Ensure 'name' is set correctly
       fieldData.slug = contractID; // Ensure 'slug' is set correctly
 
@@ -293,12 +294,13 @@ export async function POST(req) {
 
     return new NextResponse(
       JSON.stringify({ message: "Contract data processed successfully." }),
-      { status: 200 }
+      { status: 200, headers: responseHeaders }
     );
   } catch (error) {
     console.error("Error in Vercel POST:", error);
     return new NextResponse(JSON.stringify({ error: error.message }), {
       status: 500,
+      headers: responseHeaders,
     });
   }
 }
