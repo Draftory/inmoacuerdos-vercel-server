@@ -122,7 +122,6 @@ export async function POST(req) {
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const webflowItemIdColumnIndex = headerRow.indexOf("webflowItemId"); // Assuming you have this column
 
     if (contractIDColumnIndex === -1)
       throw new Error("contractID column not found.");
@@ -136,10 +135,6 @@ export async function POST(req) {
       throw new Error("payment_id column not found.");
     if (fechaDePagoColumnIndex === -1)
       throw new Error("fechaDePago column not found.");
-    if (webflowItemIdColumnIndex === -1)
-      console.warn(
-        "webflowItemId column not found. Webflow will not be updated with document links."
-      );
 
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -150,7 +145,6 @@ export async function POST(req) {
     let rowIndex = -1;
     let rowDataToPass;
     let existingPaymentId;
-    let webflowItemId;
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
@@ -159,7 +153,6 @@ export async function POST(req) {
         rowIndex = i + 1;
         rowDataToPass = allRows[i];
         existingPaymentId = allRows[i][paymentIdColumnIndex]; // Get existing payment_id
-        webflowItemId = allRows[i][webflowItemIdColumnIndex]; // Get existing webflowItemId
         break;
       }
     }
@@ -218,45 +211,76 @@ export async function POST(req) {
             appsScriptResponseData = await appsScriptResponse.json();
             console.log("Apps Script response:", appsScriptResponseData);
 
-            // --- Update Webflow (if configured and payment_id was empty) ---
+            // --- Update Webflow by contractID (if configured and payment_id was empty) ---
             if (
               !existingPaymentId &&
               WEBFLOW_API_TOKEN &&
               WEBFLOW_CONTRACTS_COLLECTION_ID &&
-              webflowItemId &&
               appsScriptResponseData?.pdfUrl &&
               appsScriptResponseData?.docUrl
             ) {
               try {
-                const webflowApiUrl = `https://api.webflow.com/collections/${WEBFLOW_CONTRACTS_COLLECTION_ID}/items/${webflowItemId}`;
-                const webflowUpdateData = {
-                  fields: {
-                    pdf_de_contrato: appsScriptResponseData.pdfUrl,
-                    link_de_documento: appsScriptResponseData.docUrl,
-                    _draft: false,
-                    _published: true,
-                  },
-                };
+                const webflowApiUrl = `https://api.webflow.com/collections/${WEBFLOW_CONTRACTS_COLLECTION_ID}/items?name=${contractID}`;
 
-                const webflowResponse = await fetch(webflowApiUrl, {
-                  method: "PUT",
+                const listWebflowResponse = await fetch(webflowApiUrl, {
+                  method: "GET",
                   headers: {
                     Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
-                    "Content-Type": "application/json",
                     "accept-version": "1.0.0",
                   },
-                  body: JSON.stringify(webflowUpdateData),
                 });
 
-                if (webflowResponse.ok) {
-                  const webflowResult = await webflowResponse.json();
-                  console.log(
-                    "Webflow item updated successfully:",
-                    webflowResult
-                  );
+                if (listWebflowResponse.ok) {
+                  const webflowListData = await listWebflowResponse.json();
+                  if (
+                    webflowListData.items &&
+                    webflowListData.items.length > 0
+                  ) {
+                    const webflowItemIdToUpdate = webflowListData.items[0]._id;
+                    const webflowUpdateApiUrl = `https://api.webflow.com/collections/${WEBFLOW_CONTRACTS_COLLECTION_ID}/items/${webflowItemIdToUpdate}`;
+                    const webflowUpdateData = {
+                      fields: {
+                        pdf_de_contrato: appsScriptResponseData.pdfUrl,
+                        link_de_documento: appsScriptResponseData.docUrl,
+                        _draft: false,
+                        _published: true,
+                      },
+                    };
+
+                    const webflowUpdateResponse = await fetch(
+                      webflowUpdateApiUrl,
+                      {
+                        method: "PUT",
+                        headers: {
+                          Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
+                          "Content-Type": "application/json",
+                          "accept-version": "1.0.0",
+                        },
+                        body: JSON.stringify(webflowUpdateData),
+                      }
+                    );
+
+                    if (webflowUpdateResponse.ok) {
+                      const webflowResult = await webflowUpdateResponse.json();
+                      console.log(
+                        "Webflow item updated successfully (by contractID):",
+                        webflowResult
+                      );
+                    } else {
+                      const errorData = await webflowUpdateResponse.json();
+                      console.error(
+                        "Error updating Webflow item (by contractID):",
+                        errorData
+                      );
+                    }
+                  } else {
+                    console.warn(
+                      `Webflow item with contractID '${contractID}' not found.`
+                    );
+                  }
                 } else {
-                  const errorData = await webflowResponse.json();
-                  console.error("Error updating Webflow item:", errorData);
+                  const errorData = await listWebflowResponse.json();
+                  console.error("Error listing Webflow items:", errorData);
                 }
               } catch (error) {
                 console.error("Error communicating with Webflow:", error);
@@ -264,10 +288,6 @@ export async function POST(req) {
             } else if (existingPaymentId) {
               console.log(
                 "Payment ID already exists. Skipping Webflow update."
-              );
-            } else if (!webflowItemId) {
-              console.warn(
-                "Webflow Item ID not found. Skipping Webflow update."
               );
             } else {
               console.warn(
