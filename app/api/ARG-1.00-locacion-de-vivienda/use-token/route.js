@@ -112,8 +112,8 @@ export async function POST(req) {
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const pdfFileColumnIndex = headerRow.indexOf("pdffile");
-    const docFileColumnIndex = headerRow.indexOf("docfile");
+    const pdfFileColumnIndex = headerRow.indexOf("PDFFile"); // Use correct column name
+    const docFileColumnIndex = headerRow.indexOf("DOCFile"); // Use correct column name
 
     if (contractIDColumnIndex === -1)
       throw new Error("contractID column not found.");
@@ -127,8 +127,8 @@ export async function POST(req) {
       throw new Error("payment_id column not found.");
     if (fechaDePagoColumnIndex === -1)
       throw new Error("fechaDePago column not found.");
-    if (pdfFileColumnIndex === -1) console.warn("pdffile column not found.");
-    if (docFileColumnIndex === -1) console.warn("docfile column not found.");
+    if (pdfFileColumnIndex === -1) console.warn("PDFFile column not found.");
+    if (docFileColumnIndex === -1) console.warn("DOCFile column not found.");
 
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -139,8 +139,6 @@ export async function POST(req) {
     let rowIndex = -1;
     let rowDataToPass;
     let existingPaymentId;
-    let existingPdfFile;
-    let existingDocFile;
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
@@ -149,8 +147,6 @@ export async function POST(req) {
         rowIndex = i + 1;
         rowDataToPass = allRows[i];
         existingPaymentId = allRows[i][paymentIdColumnIndex]; // Get existing payment_id
-        existingPdfFile = allRows[i][pdfFileColumnIndex];
-        existingDocFile = allRows[i][docFileColumnIndex];
         break;
       }
     }
