@@ -16,6 +16,9 @@ const LOCACION_POST_DATABASE_SHEET_ID =
   process.env.LOCACION_POST_DATABASE_SHEET_ID;
 const LOCACION_POST_DATABASE_SHEET_NAME =
   process.env.LOCACION_POST_DATABASE_SHEET_NAME;
+const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
+const WEBFLOW_CONTRACTS_COLLECTION_ID =
+  process.env.WEBFLOW_CONTRACTS_COLLECTION_ID;
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -35,7 +38,7 @@ export async function OPTIONS(req) {
 
 export async function POST(req) {
   console.log(
-    "Starting API request for Token payment update and potential document generation/email"
+    "Starting API request for Token payment update, document generation, Webflow update, and email"
   );
   const origin = req.headers.get("origin");
   const responseHeaders = {
@@ -46,10 +49,21 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
-  // --- **IMPORTANT: Ensure VERCEL_API_SECRET is set in your Vercel Environment Variables** ---
   if (!VERCEL_API_SECRET && APPS_SCRIPT_GENERATE_DOC_URL) {
     console.warn(
       "Warning: VERCEL_API_SECRET environment variable is not set in Vercel, but APPS_SCRIPT_GENERATE_DOC_URL is. The Google Apps Script for document generation will NOT be triggered."
+    );
+  }
+
+  if (!WEBFLOW_API_TOKEN && WEBFLOW_CONTRACTS_COLLECTION_ID) {
+    console.warn(
+      "Warning: WEBFLOW_API_TOKEN environment variable is not set in Vercel, but WEBFLOW_CONTRACTS_COLLECTION_ID is. Webflow will NOT be updated."
+    );
+  }
+
+  if (!RESEND_API_KEY && RESEND_EMAIL_FROM) {
+    console.warn(
+      "Warning: RESEND_API_KEY environment variable is not set in Vercel, but RESEND_EMAIL_FROM is. Emails will NOT be sent."
     );
   }
 
@@ -108,6 +122,7 @@ export async function POST(req) {
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
+    const webflowItemIdColumnIndex = headerRow.indexOf("webflowItemId"); // Assuming you have this column
 
     if (contractIDColumnIndex === -1)
       throw new Error("contractID column not found.");
@@ -121,6 +136,10 @@ export async function POST(req) {
       throw new Error("payment_id column not found.");
     if (fechaDePagoColumnIndex === -1)
       throw new Error("fechaDePago column not found.");
+    if (webflowItemIdColumnIndex === -1)
+      console.warn(
+        "webflowItemId column not found. Webflow will not be updated with document links."
+      );
 
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -131,6 +150,7 @@ export async function POST(req) {
     let rowIndex = -1;
     let rowDataToPass;
     let existingPaymentId;
+    let webflowItemId;
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
@@ -139,6 +159,7 @@ export async function POST(req) {
         rowIndex = i + 1;
         rowDataToPass = allRows[i];
         existingPaymentId = allRows[i][paymentIdColumnIndex]; // Get existing payment_id
+        webflowItemId = allRows[i][webflowItemIdColumnIndex]; // Get existing webflowItemId
         break;
       }
     }
@@ -196,6 +217,111 @@ export async function POST(req) {
           if (appsScriptResponse.ok) {
             appsScriptResponseData = await appsScriptResponse.json();
             console.log("Apps Script response:", appsScriptResponseData);
+
+            // --- Update Webflow (if configured and payment_id was empty) ---
+            if (
+              !existingPaymentId &&
+              WEBFLOW_API_TOKEN &&
+              WEBFLOW_CONTRACTS_COLLECTION_ID &&
+              webflowItemId &&
+              appsScriptResponseData?.pdfUrl &&
+              appsScriptResponseData?.docUrl
+            ) {
+              try {
+                const webflowApiUrl = `https://api.webflow.com/collections/${WEBFLOW_CONTRACTS_COLLECTION_ID}/items/${webflowItemId}`;
+                const webflowUpdateData = {
+                  fields: {
+                    pdf_de_contrato: appsScriptResponseData.pdfUrl,
+                    link_de_documento: appsScriptResponseData.docUrl,
+                    _draft: false,
+                    _published: true,
+                  },
+                };
+
+                const webflowResponse = await fetch(webflowApiUrl, {
+                  method: "PUT",
+                  headers: {
+                    Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
+                    "Content-Type": "application/json",
+                    "accept-version": "1.0.0",
+                  },
+                  body: JSON.stringify(webflowUpdateData),
+                });
+
+                if (webflowResponse.ok) {
+                  const webflowResult = await webflowResponse.json();
+                  console.log(
+                    "Webflow item updated successfully:",
+                    webflowResult
+                  );
+                } else {
+                  const errorData = await webflowResponse.json();
+                  console.error("Error updating Webflow item:", errorData);
+                }
+              } catch (error) {
+                console.error("Error communicating with Webflow:", error);
+              }
+            } else if (existingPaymentId) {
+              console.log(
+                "Payment ID already exists. Skipping Webflow update."
+              );
+            } else if (!webflowItemId) {
+              console.warn(
+                "Webflow Item ID not found. Skipping Webflow update."
+              );
+            } else {
+              console.warn(
+                "Webflow configuration missing or document URLs not available. Skipping Webflow update."
+              );
+            }
+
+            // --- Send Email via Resend (if configured and payment_id was empty) ---
+            if (
+              !existingPaymentId &&
+              RESEND_API_KEY &&
+              RESEND_EMAIL_FROM &&
+              appsScriptResponseData?.pdfUrl &&
+              appsScriptResponseData?.docUrl
+            ) {
+              const emailData = {
+                to: emailMember || emailGuest, // Use provided emails
+                from: RESEND_EMAIL_FROM,
+                subject: "Your Document is Ready!",
+                html: `<p>Here are the links to your documents:</p>
+                       <p><a href="${appsScriptResponseData.pdfUrl}">View PDF</a></p>
+                       <p><a href="${appsScriptResponseData.docUrl}">View DOC</a></p>`,
+              };
+              console.log("Sending email via Resend:", emailData);
+              try {
+                const resendResponse = await fetch(
+                  "https://api.resend.com/emails",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${RESEND_API_KEY}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(emailData),
+                  }
+                );
+                const resendResult = await resendResponse.json();
+                console.log("Resend API Response:", resendResult);
+                if (!resendResponse.ok) {
+                  console.error(
+                    "Error sending email via Resend:",
+                    resendResult
+                  );
+                }
+              } catch (error) {
+                console.error("Error sending email via Resend:", error);
+              }
+            } else if (existingPaymentId) {
+              console.log("Payment ID already exists. Skipping email sending.");
+            } else {
+              console.warn(
+                "Resend configuration missing or document URLs not available. Skipping email sending."
+              );
+            }
           } else {
             console.error(
               "Error calling Apps Script:",
@@ -207,55 +333,19 @@ export async function POST(req) {
           console.error("Error sending request to Apps Script:", error);
         }
       } else if (existingPaymentId) {
-        console.log("Payment ID already exists. Skipping document generation.");
+        console.log(
+          "Payment ID already exists. Skipping document generation, Webflow update, and email."
+        );
       } else {
         console.warn(
           "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured for document generation."
         );
       }
 
-      // --- Send Email via Resend (if payment_id was empty and have document URLs) ---
-      if (
-        !existingPaymentId &&
-        RESEND_API_KEY &&
-        appsScriptResponseData?.pdfUrl &&
-        appsScriptResponseData?.docUrl
-      ) {
-        const emailData = {
-          to: emailMember || emailGuest, // Use provided emails
-          from: RESEND_EMAIL_FROM,
-          subject: "Your Document is Ready!",
-          html: `<p>Here are the links to your documents:</p>
-                 <p><a href="${appsScriptResponseData.pdfUrl}">View PDF</a></p>
-                 <p><a href="${appsScriptResponseData.docUrl}">View DOC</a></p>`,
-        };
-        console.log("Sending email via Resend:", emailData);
-        try {
-          const resendResponse = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${RESEND_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(emailData),
-          });
-          const resendResult = await resendResponse.json();
-          console.log("Resend API Response:", resendResult);
-          if (!resendResponse.ok) {
-            console.error("Error sending email via Resend:", resendResult);
-          }
-        } catch (error) {
-          console.error("Error sending email via Resend:", error);
-        }
-      } else if (existingPaymentId) {
-        console.log("Payment ID already exists. Skipping email sending.");
-      } else {
-        console.warn("RESEND_API_KEY not configured or document URLs missing.");
-      }
-
       return new NextResponse(
         JSON.stringify({
-          message: "Payment details updated successfully.",
+          message:
+            "Payment details updated successfully, document generation initiated (if applicable).",
           paymentId: paymentId,
           fechaDePago: nowArgentina,
         }),
@@ -275,7 +365,7 @@ export async function POST(req) {
     }
   } catch (error) {
     console.error(
-      "POST Error (Update Token Payment with Doc Gen/Email):",
+      "POST Error (Update Token Payment with Doc Gen/Email/Webflow):",
       error
     );
     return new NextResponse(
