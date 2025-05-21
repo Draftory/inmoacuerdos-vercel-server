@@ -8,7 +8,7 @@ const allowedOrigins = [
 ];
 
 // Environment variables
-const APPS_SCRIPT_GENERATE_DOC_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL; // Para generación de documentos
+const APPS_SCRIPT_GENERATE_DOC_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
 const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_EMAIL_FROM = process.env.RESEND_EMAIL_FROM;
@@ -54,12 +54,11 @@ export async function POST(req) {
   }
 
   try {
-    const { contractID, memberstackID, status, emailMember, emailGuest } =
+    const { contractID, memberstackID, emailMember, emailGuest } =
       await req.json();
     console.log("Received data:", {
       contractID,
       memberstackID,
-      status,
       emailMember,
       emailGuest,
     });
@@ -131,6 +130,7 @@ export async function POST(req) {
 
     let rowIndex = -1;
     let rowDataToPass;
+    let existingPaymentId;
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
@@ -138,6 +138,7 @@ export async function POST(req) {
       ) {
         rowIndex = i + 1;
         rowDataToPass = allRows[i];
+        existingPaymentId = allRows[i][paymentIdColumnIndex]; // Get existing payment_id
         break;
       }
     }
@@ -168,9 +169,9 @@ export async function POST(req) {
       );
 
       let appsScriptResponseData = {};
-      // --- Call Apps Script for document generation (if status is "Contrato") ---
+      // --- Call Apps Script for document generation (if payment_id was empty) ---
       if (
-        status === "Contrato" &&
+        !existingPaymentId &&
         APPS_SCRIPT_GENERATE_DOC_URL &&
         VERCEL_API_SECRET
       ) {
@@ -181,7 +182,6 @@ export async function POST(req) {
           rowNumber: rowIndex,
           rowData: rowDataToPass,
           headers: headerRow,
-          status: status,
         };
         console.log(
           "Sending request to Apps Script for document generation:",
@@ -206,15 +206,17 @@ export async function POST(req) {
         } catch (error) {
           console.error("Error sending request to Apps Script:", error);
         }
-      } else if (status === "Contrato") {
+      } else if (existingPaymentId) {
+        console.log("Payment ID already exists. Skipping document generation.");
+      } else {
         console.warn(
           "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured for document generation."
         );
       }
 
-      // --- Send Email via Resend (if status is "Contrato" and have document URLs) ---
+      // --- Send Email via Resend (if payment_id was empty and have document URLs) ---
       if (
-        status === "Contrato" &&
+        !existingPaymentId &&
         RESEND_API_KEY &&
         appsScriptResponseData?.pdfUrl &&
         appsScriptResponseData?.docUrl
@@ -245,7 +247,9 @@ export async function POST(req) {
         } catch (error) {
           console.error("Error sending email via Resend:", error);
         }
-      } else if (status === "Contrato") {
+      } else if (existingPaymentId) {
+        console.log("Payment ID already exists. Skipping email sending.");
+      } else {
         console.warn("RESEND_API_KEY not configured or document URLs missing.");
       }
 
