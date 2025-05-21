@@ -1,28 +1,3 @@
-import { google } from "googleapis";
-import { NextResponse } from "next/server";
-import fetch from "node-fetch"; // Or your preferred HTTP library
-
-const allowedOrigins = [
-  "https://www.inmoacuerdos.com",
-  "https://inmoacuerdos.webflow.io",
-];
-
-export async function OPTIONS(req) {
-  const origin = req.headers.get("origin");
-  const headers = {
-    "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
-      ? origin
-      : allowedOrigins[0],
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
-
-  return new NextResponse(null, {
-    status: 204,
-    headers: headers,
-  });
-}
-
 export async function POST(req) {
   console.log("Starting API request to handle contract data");
   const origin = req.headers.get("origin");
@@ -158,6 +133,8 @@ export async function POST(req) {
       );
       const listItemsData = await listItemsResponse.json();
       const existingItem = listItemsData.items?.[0];
+
+      console.log("formData before mapFormDataToWebflowFields:", formData); // <--- ADD THIS LINE
 
       const fieldData = mapFormDataToWebflowFields(formData);
       fieldData.editlink = editLink; // Ensure editlink is set
