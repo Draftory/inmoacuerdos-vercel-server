@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
-import fetch from "node-fetch"; // Or your preferred HTTP library
-import { v4 as uuidv4 } from "uuid"; // Import uuidv4
+import fetch from "node-fetch";
+import { v4 as uuidv4 } from "uuid";
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -22,32 +22,6 @@ export async function OPTIONS(req) {
     status: 204,
     headers: headers,
   });
-}
-
-function mapFormDataToWebflowFields(formData) {
-  return {
-    editlink: "", // Will be set in the main POST function
-    denominacionlegallocadorpj1:
-      formData["denominacionLegalLocadorPJ1"] || null,
-    nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
-    timestamp: formData["timestamp"] || null,
-    status: formData["status"] || null, // Map 'status'
-    contrato: formData["Contrato"] || null,
-    memberstackid: formData["MemberstackID"] || null,
-    name: formData["contractID"] || "", // Directly use formData['contractID']
-    slug: formData["contractID"] || "", // Directly use formData['contractID']
-    domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
-    ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
-    nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
-    denominacionlegallocatariopj1:
-      formData["denominacionLegalLocatarioPJ1"] || null,
-    hiddeninputlocacionfechainicio:
-      formData["hiddenInputLocacionFechaInicio"] || null,
-    hiddeninputlocacionfechatermino:
-      formData["hiddenInputLocacionFechaTermino"] || null,
-    pdffile: formData["pdffile"] || null, // Map 'pdffile'
-    docfile: formData["docfile"] || null, // Map 'docfile'
-  };
 }
 
 export async function POST(req) {
@@ -88,14 +62,13 @@ export async function POST(req) {
   }
 
   try {
-    const formData = await req.json();
-    const { contractID, memberstackID, emailMember, emailGuest } = formData;
+    const { contractID, memberstackID, emailMember, emailGuest } =
+      await req.json();
     console.log("Received data:", {
       contractID,
       memberstackID,
       emailMember,
       emailGuest,
-      formData, // Log the entire formData
     });
 
     if (!contractID || !memberstackID) {
@@ -139,8 +112,8 @@ export async function POST(req) {
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const pdfFileColumnIndex = headerRow.indexOf("PDFFile"); // Use correct column name
-    const docFileColumnIndex = headerRow.indexOf("DOCFile"); // Use correct column name
+    const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
+    const docFileColumnIndex = headerRow.indexOf("DOCFile");
 
     if (contractIDColumnIndex === -1)
       throw new Error("contractID column not found.");
@@ -159,12 +132,12 @@ export async function POST(req) {
 
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`, // Adjust range as needed
+      range: `${sheetName}!A:VM`,
     });
     const allRows = allRowsResponse.data?.values || [];
 
     let rowIndex = -1;
-    let rowDataFromSheet;
+    let rowDataToPass;
     let existingPaymentId;
     for (let i = 1; i < allRows.length; i++) {
       if (
@@ -172,8 +145,8 @@ export async function POST(req) {
         allRows[i][memberstackIDColumnIndex] === memberstackID
       ) {
         rowIndex = i + 1;
-        rowDataFromSheet = allRows[i];
-        existingPaymentId = allRows[i][paymentIdColumnIndex]; // Get existing payment_id
+        rowDataToPass = allRows[i];
+        existingPaymentId = allRows[i][paymentIdColumnIndex];
         break;
       }
     }
@@ -194,7 +167,7 @@ export async function POST(req) {
 
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `<span class="math-inline">\{sheetName\}\!A</span>{rowIndex}:<span class="math-inline">\{lastColumnLetter\}</span>{rowIndex}`,
+        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
         valueInputOption: "RAW",
         requestBody: { values: [updatedRowValues] },
       });
@@ -204,7 +177,6 @@ export async function POST(req) {
       );
 
       let appsScriptResponseData = {};
-      // --- Call Apps Script for document generation (if payment_id was empty) ---
       if (
         !existingPaymentId &&
         process.env.APPS_SCRIPT_GENERATE_DOC_URL &&
@@ -215,7 +187,7 @@ export async function POST(req) {
           spreadsheetId: spreadsheetId,
           sheetName: sheetName,
           rowNumber: rowIndex,
-          rowData: rowDataFromSheet,
+          rowData: rowDataToPass,
           headers: headerRow,
         };
         console.log(
@@ -238,14 +210,13 @@ export async function POST(req) {
             const pdfUrl = appsScriptResponseData?.pdfUrl;
             const docUrl = appsScriptResponseData?.docUrl;
 
-            // --- Update Google Sheets with document links (CORRECTED ORDER) ---
             if (
               pdfUrl &&
               docUrl &&
               pdfFileColumnIndex !== -1 &&
               docFileColumnIndex !== -1
             ) {
-              const updateLinksRange = `<span class="math-inline">\{sheetName\}\!</span>{getColumnLetter(docFileColumnIndex + 1)}<span class="math-inline">\{rowIndex\}\:</span>{getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
+              const updateLinksRange = `${sheetName}!${getColumnLetter(docFileColumnIndex + 1)}${rowIndex}:${getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
               await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: updateLinksRange,
@@ -255,36 +226,33 @@ export async function POST(req) {
               console.log("Google Sheets updated with DOC and PDF links.");
             }
 
-            // --- Interact with Webflow API ---
-            const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
+            const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
             if (
               webflowApiToken &&
               process.env.WEBFLOW_USER_COLLECTION_ID &&
-              !existingPaymentId // Only update Webflow if it's a new payment
+              pdfUrl &&
+              docUrl &&
+              !existingPaymentId
             ) {
               const webflowCollectionId =
-                process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
+                process.env.WEBFLOW_USER_COLLECTION_ID;
 
-              // Use the mapFormDataToWebflowFields function
-              const webflowFieldData = mapFormDataToWebflowFields({
-                ...Object.fromEntries(
-                  headerRow.map((header, index) => [
-                    header,
-                    rowDataFromSheet[index],
-                  ])
-                ),
-                contractID: contractID, // Ensure contractID is available
-                MemberstackID: memberstackID, // Ensure MemberstackID is available
-                pdffile: pdfUrl, // Include the generated PDF URL
-                docfile: docUrl, // Include the generated DOC URL
+              // Create formData object from headerRow and rowDataToPass
+              const formData = {};
+              headerRow.forEach((header, index) => {
+                formData[header] = rowDataToPass[index];
               });
 
-              const itemNameFieldSlug = "name";
+              // Map all fields from formData to Webflow fields
+              const fieldData = mapFormDataToWebflowFields(formData);
+              // Override pdffile and docfile with the actual URLs from Apps Script
+              fieldData.pdffile = pdfUrl;
+              fieldData.docfile = docUrl;
 
               const fetchUrl = new URL(
                 `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
               );
-              fetchUrl.searchParams.set(itemNameFieldSlug, contractID);
+              fetchUrl.searchParams.set("name", contractID); // Assuming 'name' is the field to search by contractID
 
               const listItemsResponse = await fetch(fetchUrl.toString(), {
                 method: "GET",
@@ -299,18 +267,18 @@ export async function POST(req) {
               let webflowResponse;
               let requestBody;
               const updateUrl = existingItem
-                ? `https://api.webflow.com/v2/collections/<span class="math-inline">\{webflowCollectionId\}/items/</span>{existingItem._id}/live`
-                : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well
+                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
+                : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
               const method = existingItem ? "PATCH" : "POST";
 
               if (method === "POST") {
                 requestBody = {
-                  fieldData: webflowFieldData,
+                  fieldData: fieldData,
                 };
               } else {
                 requestBody = {
-                  fieldData: webflowFieldData,
+                  fieldData: fieldData,
                   isArchived: false,
                   isDraft: false,
                 };
@@ -339,15 +307,13 @@ export async function POST(req) {
                   "Error interacting with Webflow API:",
                   webflowResult
                 );
-                // Consider how to handle Webflow API errors
               }
             } else {
               console.warn(
-                "WEBFLOW_API_TOKEN or collection ID not configured, or payment already processed. Skipping Webflow update."
+                "WEBFLOW_API_TOKEN or collection ID not configured, or document URLs missing, or payment already processed. Skipping Webflow update."
               );
             }
 
-            // --- Send Email via Resend ---
             if (
               process.env.RESEND_API_KEY &&
               process.env.RESEND_EMAIL_FROM &&
@@ -360,8 +326,8 @@ export async function POST(req) {
                 from: process.env.RESEND_EMAIL_FROM,
                 subject: "Your Document is Ready!",
                 html: `<p>Here are the links to your documents:</p>
-                       <p><a href="<span class="math-inline">\{pdfUrl\}"\>View PDF</a\></p\>
-<p\><a href\="</span>{docUrl}">View DOC</a></p>`,
+                       <p><a href="${pdfUrl}">View PDF</a></p>
+                       <p><a href="${docUrl}">View DOC</a></p>`,
               };
               console.log("Sending email via Resend:", emailData);
               try {
@@ -454,4 +420,30 @@ function getColumnLetter(columnNumber) {
     temp = Math.floor((temp - 1) / 26);
   }
   return columnLetter;
+}
+
+function mapFormDataToWebflowFields(formData) {
+  return {
+    editlink: "",
+    denominacionlegallocadorpj1:
+      formData["denominacionLegalLocadorPJ1"] || null,
+    nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
+    timestamp: formData["timestamp"] || null,
+    status: formData["status"] || null,
+    contrato: formData["Contrato"] || null,
+    memberstackid: formData["MemberstackID"] || null,
+    name: formData["contractID"] || "",
+    slug: formData["contractID"] || "",
+    domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
+    ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
+    nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
+    denominacionlegallocatariopj1:
+      formData["denominacionLegalLocatarioPJ1"] || null,
+    hiddeninputlocacionfechainicio:
+      formData["hiddenInputLocacionFechaInicio"] || null,
+    hiddeninputlocacionfechatermino:
+      formData["hiddenInputLocacionFechaTermino"] || null,
+    pdffile: formData["pdffile"] || null,
+    docfile: formData["docfile"] || null,
+  };
 }
