@@ -24,6 +24,32 @@ export async function OPTIONS(req) {
   });
 }
 
+function mapFormDataToWebflowFields(formData) {
+  return {
+    editlink: "", // Will be set in the main POST function
+    denominacionlegallocadorpj1:
+      formData["denominacionLegalLocadorPJ1"] || null,
+    nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
+    timestamp: formData["timestamp"] || null,
+    status: formData["status"] || null, // Map 'status'
+    contrato: formData["Contrato"] || null,
+    memberstackid: formData["MemberstackID"] || null,
+    name: formData["contractID"] || "", // Directly use formData['contractID']
+    slug: formData["contractID"] || "", // Directly use formData['contractID']
+    domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
+    ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
+    nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
+    denominacionlegallocatariopj1:
+      formData["denominacionLegalLocatarioPJ1"] || null,
+    hiddeninputlocacionfechainicio:
+      formData["hiddenInputLocacionFechaInicio"] || null,
+    hiddeninputlocacionfechatermino:
+      formData["hiddenInputLocacionFechaTermino"] || null,
+    pdffile: formData["pdffile"] || null, // Map 'pdffile'
+    docfile: formData["docfile"] || null, // Map 'docfile'
+  };
+}
+
 export async function POST(req) {
   console.log(
     "Starting API request for Token payment update, document generation, Webflow update, and email"
@@ -62,13 +88,14 @@ export async function POST(req) {
   }
 
   try {
-    const { contractID, memberstackID, emailMember, emailGuest } =
-      await req.json();
+    const formData = await req.json();
+    const { contractID, memberstackID, emailMember, emailGuest } = formData;
     console.log("Received data:", {
       contractID,
       memberstackID,
       emailMember,
       emailGuest,
+      formData, // Log the entire formData
     });
 
     if (!contractID || !memberstackID) {
@@ -137,7 +164,7 @@ export async function POST(req) {
     const allRows = allRowsResponse.data?.values || [];
 
     let rowIndex = -1;
-    let rowDataToPass;
+    let rowDataFromSheet;
     let existingPaymentId;
     for (let i = 1; i < allRows.length; i++) {
       if (
@@ -145,7 +172,7 @@ export async function POST(req) {
         allRows[i][memberstackIDColumnIndex] === memberstackID
       ) {
         rowIndex = i + 1;
-        rowDataToPass = allRows[i];
+        rowDataFromSheet = allRows[i];
         existingPaymentId = allRows[i][paymentIdColumnIndex]; // Get existing payment_id
         break;
       }
@@ -167,7 +194,7 @@ export async function POST(req) {
 
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
+        range: `<span class="math-inline">\{sheetName\}\!A</span>{rowIndex}:<span class="math-inline">\{lastColumnLetter\}</span>{rowIndex}`,
         valueInputOption: "RAW",
         requestBody: { values: [updatedRowValues] },
       });
@@ -188,7 +215,7 @@ export async function POST(req) {
           spreadsheetId: spreadsheetId,
           sheetName: sheetName,
           rowNumber: rowIndex,
-          rowData: rowDataToPass,
+          rowData: rowDataFromSheet,
           headers: headerRow,
         };
         console.log(
@@ -218,7 +245,7 @@ export async function POST(req) {
               pdfFileColumnIndex !== -1 &&
               docFileColumnIndex !== -1
             ) {
-              const updateLinksRange = `${sheetName}!${getColumnLetter(docFileColumnIndex + 1)}${rowIndex}:${getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
+              const updateLinksRange = `<span class="math-inline">\{sheetName\}\!</span>{getColumnLetter(docFileColumnIndex + 1)}<span class="math-inline">\{rowIndex\}\:</span>{getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
               await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: updateLinksRange,
@@ -228,17 +255,30 @@ export async function POST(req) {
               console.log("Google Sheets updated with DOC and PDF links.");
             }
 
-            // --- Interact with Webflow API (EXACT APPROACH FROM OTHER ENDPOINT) ---
+            // --- Interact with Webflow API ---
             const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
             if (
               webflowApiToken &&
               process.env.WEBFLOW_USER_COLLECTION_ID &&
-              pdfUrl &&
-              docUrl &&
-              !existingPaymentId
+              !existingPaymentId // Only update Webflow if it's a new payment
             ) {
               const webflowCollectionId =
                 process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
+
+              // Use the mapFormDataToWebflowFields function
+              const webflowFieldData = mapFormDataToWebflowFields({
+                ...Object.fromEntries(
+                  headerRow.map((header, index) => [
+                    header,
+                    rowDataFromSheet[index],
+                  ])
+                ),
+                contractID: contractID, // Ensure contractID is available
+                MemberstackID: memberstackID, // Ensure MemberstackID is available
+                pdffile: pdfUrl, // Include the generated PDF URL
+                docfile: docUrl, // Include the generated DOC URL
+              });
+
               const itemNameFieldSlug = "name";
 
               const fetchUrl = new URL(
@@ -256,30 +296,21 @@ export async function POST(req) {
               const listItemsData = await listItemsResponse.json();
               const existingItem = listItemsData.items?.[0];
 
-              const fieldData = {
-                pdffile: pdfUrl, // Ensure 'pdffile' matches your Webflow field slug
-                docfile: docUrl, // Ensure 'docfile' matches your Webflow field slug
-                name: contractID,
-                slug: contractID,
-                _draft: false,
-                _published: true,
-              };
-
               let webflowResponse;
               let requestBody;
               const updateUrl = existingItem
-                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
+                ? `https://api.webflow.com/v2/collections/<span class="math-inline">\{webflowCollectionId\}/items/</span>{existingItem._id}/live`
                 : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well
 
               const method = existingItem ? "PATCH" : "POST";
 
               if (method === "POST") {
                 requestBody = {
-                  fieldData: fieldData,
+                  fieldData: webflowFieldData,
                 };
               } else {
                 requestBody = {
-                  fieldData: fieldData,
+                  fieldData: webflowFieldData,
                   isArchived: false,
                   isDraft: false,
                 };
@@ -312,7 +343,7 @@ export async function POST(req) {
               }
             } else {
               console.warn(
-                "WEBFLOW_API_TOKEN or collection ID not configured, or document URLs missing, or payment already processed. Skipping Webflow update."
+                "WEBFLOW_API_TOKEN or collection ID not configured, or payment already processed. Skipping Webflow update."
               );
             }
 
@@ -329,8 +360,8 @@ export async function POST(req) {
                 from: process.env.RESEND_EMAIL_FROM,
                 subject: "Your Document is Ready!",
                 html: `<p>Here are the links to your documents:</p>
-                       <p><a href="${pdfUrl}">View PDF</a></p>
-                       <p><a href="${docUrl}">View DOC</a></p>`,
+                       <p><a href="<span class="math-inline">\{pdfUrl\}"\>View PDF</a\></p\>
+<p\><a href\="</span>{docUrl}">View DOC</a></p>`,
               };
               console.log("Sending email via Resend:", emailData);
               try {
