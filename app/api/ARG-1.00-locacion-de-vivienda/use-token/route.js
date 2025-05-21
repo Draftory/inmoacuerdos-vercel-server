@@ -236,7 +236,7 @@ export async function POST(req) {
             ) {
               const webflowCollectionId =
                 process.env.WEBFLOW_USER_COLLECTION_ID;
-              const itemNameFieldSlug = "name"; // Defined as per the working code
+              const itemNameFieldSlug = "name";
 
               // Create formData object from headerRow and rowDataToPass
               const formData = {};
@@ -265,14 +265,16 @@ export async function POST(req) {
               });
               const listItemsData = await listItemsResponse.json();
               const existingItem = listItemsData.items?.[0];
+              // Added a check to ensure existingItem has a valid _id before attempting PATCH
+              const hasValidExistingItem = existingItem && existingItem._id;
 
               let webflowResponse;
               let requestBody;
-              const updateUrl = existingItem
+              const updateUrl = hasValidExistingItem
                 ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
                 : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
-              const method = existingItem ? "PATCH" : "POST";
+              const method = hasValidExistingItem ? "PATCH" : "POST"; // Use hasValidExistingItem for method determination
 
               if (method === "POST") {
                 requestBody = {
