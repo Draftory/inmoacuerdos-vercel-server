@@ -1,15 +1,21 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { webflowUtility } from "https://inmoacuerdos-vercel-server.vercel.app/api/Utilities/webflowGetUpdateCreate"; // Adjust path as needed
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
   "https://inmoacuerdos.webflow.io",
 ];
 
-const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
+// Environment variables
+const APPS_SCRIPT_GENERATE_DOC_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL; // Para generación de documentos
 const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RESEND_EMAIL_FROM = process.env.RESEND_EMAIL_FROM;
+const LOCACION_POST_DATABASE_SHEET_ID =
+  process.env.LOCACION_POST_DATABASE_SHEET_ID;
+const LOCACION_POST_DATABASE_SHEET_NAME =
+  process.env.LOCACION_POST_DATABASE_SHEET_NAME;
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -28,7 +34,9 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log("Starting API request for Token payment success");
+  console.log(
+    "Starting API request for Token payment update and potential document generation/email"
+  );
   const origin = req.headers.get("origin");
   const responseHeaders = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
@@ -38,68 +46,91 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
-  if (!VERCEL_API_SECRET && APPS_SCRIPT_URL) {
+  // --- **IMPORTANT: Ensure VERCEL_API_SECRET is set in your Vercel Environment Variables** ---
+  if (!VERCEL_API_SECRET && APPS_SCRIPT_GENERATE_DOC_URL) {
     console.warn(
-      "Warning: VERCEL_API_SECRET not set, Apps Script will NOT be triggered."
+      "Warning: VERCEL_API_SECRET environment variable is not set in Vercel, but APPS_SCRIPT_GENERATE_DOC_URL is. The Google Apps Script for document generation will NOT be triggered."
     );
   }
 
   try {
-    const { contractID, memberstackID } = await req.json();
-    console.log("Received data for payment success:", {
+    const { contractID, memberstackID, status, emailMember, emailGuest } =
+      await req.json();
+    console.log("Received data:", {
       contractID,
       memberstackID,
+      status,
+      emailMember,
+      emailGuest,
     });
 
     if (!contractID || !memberstackID) {
-      throw new Error("contractID and memberstackID are required.");
+      throw new Error(
+        "contractID and memberstackID are required in the request body."
+      );
     }
 
-    // --- Google Sheets Update (Payment Info) ---
-    const googleCredentials = JSON.parse(
-      Buffer.from(
-        process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET,
-        "base64"
-      ).toString("utf-8")
-    );
+    const googleCredentialsBase64 =
+      process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+
+    if (!googleCredentialsBase64) {
+      throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
+    }
+
+    const googleCredentialsJson = Buffer.from(
+      googleCredentialsBase64,
+      "base64"
+    ).toString("utf-8");
+    const credentials = JSON.parse(googleCredentialsJson);
+
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
+
     const client = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: client });
-    const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
-    const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
+
+    const spreadsheetId = LOCACION_POST_DATABASE_SHEET_ID;
+    const sheetName = LOCACION_POST_DATABASE_SHEET_NAME;
+
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!1:1`,
     });
-    const headerRow = headerResponse.data?.values?.[0] || [];
+    const headerRow = headerResponse.data?.values?.[0];
+    if (!headerRow || headerRow.length === 0) {
+      throw new Error("Header row not found in the spreadsheet.");
+    }
+
     const contractIDColumnIndex = headerRow.indexOf("contractID");
     const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
     const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago");
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
+
+    if (contractIDColumnIndex === -1)
+      throw new Error("contractID column not found.");
+    if (memberstackIDColumnIndex === -1)
+      throw new Error("MemberstackID column not found.");
+    if (tipoDePagoColumnIndex === -1)
+      throw new Error("tipoDePago column not found.");
+    if (estadoDePagoColumnIndex === -1)
+      throw new Error("estadoDePago column not found.");
+    if (paymentIdColumnIndex === -1)
+      throw new Error("payment_id column not found.");
+    if (fechaDePagoColumnIndex === -1)
+      throw new Error("fechaDePago column not found.");
+
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`,
+      range: `${sheetName}!A:VM`, // Adjust range as needed
     });
     const allRows = allRowsResponse.data?.values || [];
+
     let rowIndex = -1;
     let rowDataToPass;
-
-    if (
-      contractIDColumnIndex === -1 ||
-      memberstackIDColumnIndex === -1 ||
-      tipoDePagoColumnIndex === -1 ||
-      estadoDePagoColumnIndex === -1 ||
-      paymentIdColumnIndex === -1 ||
-      fechaDePagoColumnIndex === -1
-    ) {
-      throw new Error("One or more required columns not found in the header.");
-    }
-
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
@@ -107,128 +138,153 @@ export async function POST(req) {
       ) {
         rowIndex = i + 1;
         rowDataToPass = allRows[i];
-        const paymentId = uuidv4();
-        const nowArgentina = new Date().toLocaleString("en-US", {
-          timeZone: "America/Argentina/Buenos_Aires",
-        });
-        const updatedRowValues = [...allRows[i]];
-        updatedRowValues[tipoDePagoColumnIndex] = "Token";
-        updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
-        updatedRowValues[paymentIdColumnIndex] = paymentId;
-        updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
-        const lastColumnLetter = getColumnLetter(updatedRowValues.length);
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
-          valueInputOption: "RAW",
-          requestBody: { values: [updatedRowValues] },
-        });
-        console.log(
-          `Payment updated for contractID: ${contractID}, paymentId: ${paymentId}`
-        );
-
-        let appsScriptResult = {};
-        // --- Trigger Google Apps Script ---
-        if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
-          try {
-            const response = await fetch(APPS_SCRIPT_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                secret: VERCEL_API_SECRET,
-                spreadsheetId,
-                sheetName,
-                rowNumber: rowIndex,
-                rowData: rowDataToPass,
-                headers: headerRow,
-              }),
-            });
-            if (response.ok) {
-              appsScriptResult = await response.json();
-              console.log(
-                "Apps Script triggered successfully:",
-                appsScriptResult
-              );
-              // Apps Script should ideally return the PDF and DOC URLs
-            } else {
-              console.error(
-                "Error triggering Apps Script:",
-                response.status,
-                response.statusText,
-                await response.text()
-              );
-            }
-          } catch (error) {
-            console.error("Error sending request to Apps Script:", error);
-          }
-        } else {
-          console.warn(
-            "APPS_SCRIPT_URL or VERCEL_API_SECRET not set, skipping Apps Script trigger."
-          );
-        }
-
-        // --- Interact with Webflow API using utility ---
-        const webflowFieldData = {
-          estadoDePago: "Pagado", // Update payment status in Webflow
-          payment_id: paymentId,
-          fechaDePago: nowArgentina,
-          pdffile: appsScriptResult?.pdfUrl || null, // Assuming Apps Script returns these
-          docfile: appsScriptResult?.docUrl || null,
-        };
-
-        const webflowUpdateResult = await webflowUtility(
-          contractID,
-          webflowFieldData
-        );
-
-        if (webflowUpdateResult.success) {
-          console.log(
-            "Webflow updated successfully after payment:",
-            webflowUpdateResult.data
-          );
-          return new NextResponse(
-            JSON.stringify({
-              message:
-                "Payment updated, Apps Script triggered, and Webflow updated.",
-              paymentId,
-            }),
-            { status: 200, headers }
-          );
-        } else {
-          console.error(
-            "Error updating Webflow after payment:",
-            webflowUpdateResult.error,
-            webflowUpdateResult.details
-          );
-          return new NextResponse(
-            JSON.stringify({
-              message:
-                "Payment updated and Apps Script triggered, but error updating Webflow.",
-              paymentId,
-              webflowError: webflowUpdateResult.error,
-              webflowDetails: webflowUpdateResult.details,
-            }),
-            { status: 500, headers }
-          );
-        }
+        break;
       }
     }
 
-    return new NextResponse(
-      JSON.stringify({
-        error: "Matching contractID and memberstackID not found.",
-      }),
-      { status: 404, headers }
-    );
+    if (rowIndex !== -1) {
+      const paymentId = uuidv4();
+      const nowArgentina = new Date().toLocaleString("en-US", {
+        timeZone: "America/Argentina/Buenos_Aires",
+      });
+
+      const updatedRowValues = allRows[rowIndex - 1] || [];
+      updatedRowValues[tipoDePagoColumnIndex] = "Token";
+      updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
+      updatedRowValues[paymentIdColumnIndex] = paymentId;
+      updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
+
+      const lastColumnLetter = getColumnLetter(updatedRowValues.length);
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [updatedRowValues] },
+      });
+
+      console.log(
+        `Payment details updated for contractID: ${contractID}, MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
+      );
+
+      let appsScriptResponseData = {};
+      // --- Call Apps Script for document generation (if status is "Contrato") ---
+      if (
+        status === "Contrato" &&
+        APPS_SCRIPT_GENERATE_DOC_URL &&
+        VERCEL_API_SECRET
+      ) {
+        const dataToSendToAppsScript = {
+          secret: VERCEL_API_SECRET,
+          spreadsheetId: spreadsheetId,
+          sheetName: sheetName,
+          rowNumber: rowIndex,
+          rowData: rowDataToPass,
+          headers: headerRow,
+          status: status,
+        };
+        console.log(
+          "Sending request to Apps Script for document generation:",
+          dataToSendToAppsScript
+        );
+        try {
+          const appsScriptResponse = await fetch(APPS_SCRIPT_GENERATE_DOC_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(dataToSendToAppsScript),
+          });
+          if (appsScriptResponse.ok) {
+            appsScriptResponseData = await appsScriptResponse.json();
+            console.log("Apps Script response:", appsScriptResponseData);
+          } else {
+            console.error(
+              "Error calling Apps Script:",
+              appsScriptResponse.statusText,
+              await appsScriptResponse.text()
+            );
+          }
+        } catch (error) {
+          console.error("Error sending request to Apps Script:", error);
+        }
+      } else if (status === "Contrato") {
+        console.warn(
+          "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured for document generation."
+        );
+      }
+
+      // --- Send Email via Resend (if status is "Contrato" and have document URLs) ---
+      if (
+        status === "Contrato" &&
+        RESEND_API_KEY &&
+        appsScriptResponseData?.pdfUrl &&
+        appsScriptResponseData?.docUrl
+      ) {
+        const emailData = {
+          to: emailMember || emailGuest, // Use provided emails
+          from: RESEND_EMAIL_FROM,
+          subject: "Your Document is Ready!",
+          html: `<p>Here are the links to your documents:</p>
+                 <p><a href="${appsScriptResponseData.pdfUrl}">View PDF</a></p>
+                 <p><a href="${appsScriptResponseData.docUrl}">View DOC</a></p>`,
+        };
+        console.log("Sending email via Resend:", emailData);
+        try {
+          const resendResponse = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(emailData),
+          });
+          const resendResult = await resendResponse.json();
+          console.log("Resend API Response:", resendResult);
+          if (!resendResponse.ok) {
+            console.error("Error sending email via Resend:", resendResult);
+          }
+        } catch (error) {
+          console.error("Error sending email via Resend:", error);
+        }
+      } else if (status === "Contrato") {
+        console.warn("RESEND_API_KEY not configured or document URLs missing.");
+      }
+
+      return new NextResponse(
+        JSON.stringify({
+          message: "Payment details updated successfully.",
+          paymentId: paymentId,
+          fechaDePago: nowArgentina,
+        }),
+        { status: 200, headers: responseHeaders }
+      );
+    } else {
+      console.log(
+        `contractID: ${contractID} and MemberstackID: ${memberstackID} not found in the spreadsheet.`
+      );
+      return new NextResponse(
+        JSON.stringify({
+          error:
+            "Matching contractID and MemberstackID not found in the spreadsheet.",
+        }),
+        { status: 404, headers: responseHeaders }
+      );
+    }
   } catch (error) {
-    console.error("POST Error (Payment Success):", error);
+    console.error(
+      "POST Error (Update Token Payment with Doc Gen/Email):",
+      error
+    );
     return new NextResponse(
       JSON.stringify({ error: error.message, stack: error.stack }),
-      { status: 500, headers }
+      {
+        status: 500,
+        headers: responseHeaders,
+      }
     );
   }
 }
 
+// Function to convert column number to letter
 function getColumnLetter(columnNumber) {
   let columnLetter = "";
   let temp = columnNumber;

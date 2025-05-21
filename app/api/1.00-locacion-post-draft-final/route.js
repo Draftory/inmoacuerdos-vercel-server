@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
-import { webflowUtility } from "https://inmoacuerdos-vercel-server.vercel.app/api/Utilities/webflowGetUpdateCreate"; // Adjust path as needed
+import fetch from "node-fetch"; // Or your preferred HTTP library
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -24,9 +24,10 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log("Starting API request to Google Sheets & Webflow (Draft)");
+  console.log("Starting API request to handle contract data");
   const origin = req.headers.get("origin");
   const responseHeaders = {
+    // Create headers object for the response
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
@@ -36,8 +37,9 @@ export async function POST(req) {
 
   try {
     const formObject = await req.json();
-    console.log("Received formObject (Server-Side - Draft):", formObject);
-    const { contractID, ...formData } = formObject;
+    console.log("Received formObject (Server-Side):", formObject);
+    const { contractID, status, ...formData } = formObject;
+    console.log("Extracted formData:", formData);
 
     if (
       !formObject ||
@@ -50,139 +52,193 @@ export async function POST(req) {
     // --- 1. Generate Edit Link ---
     const editLink = `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`;
 
-    // --- 2. Update Google Sheets ---
-    const googleCredentials = JSON.parse(
-      Buffer.from(
-        process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET,
-        "base64"
-      ).toString("utf-8")
-    );
+    const googleCredentialsBase64 =
+      process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
+
+    if (!googleCredentialsBase64) {
+      throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
+    }
+
+    const googleCredentialsJson = Buffer.from(
+      googleCredentialsBase64,
+      "base64"
+    ).toString("utf-8");
+    const credentials = JSON.parse(googleCredentialsJson);
+
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
+
     const client = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: client });
+
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
+
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!1:1`,
     });
     const headerRow = headerResponse.data?.values?.[0] || [];
+    const headerSet = new Set(headerRow);
     const orderedValues = headerRow.map((header) => formObject[header] || "");
-    const lastColumnLetter = getColumnLetter(orderedValues.length);
-    const contractIDColumnIndexGS = headerRow.indexOf("contractID");
-    const memberstackIDColumnIndexGS = headerRow.indexOf("MemberstackID");
-    let rowIndexGS = -1;
-    const allRowsResponseGS = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${sheetName}!A:VM`,
-    });
-    const allRowsGS = allRowsResponseGS.data?.values || [];
-    const editLinkColumnIndexGS = headerRow.indexOf("Editlink");
-    const valuesToWriteGS = [...orderedValues];
-    if (editLinkColumnIndexGS !== -1) {
-      valuesToWriteGS[editLinkColumnIndexGS] = editLink;
+
+    // Find the index of the 'Editlink' column
+    const editLinkColumnIndex = headerRow.indexOf("Editlink");
+    const valuesToWrite = [...orderedValues];
+    if (editLinkColumnIndex !== -1) {
+      valuesToWrite[editLinkColumnIndex] = editLink;
     } else {
       console.warn("Warning: 'Editlink' column not found in the sheet header.");
-      valuesToWriteGS.push(editLink);
+      valuesToWrite.push(editLink); // Append to the end
     }
+    const lastColumnLetter = getColumnLetter(valuesToWrite.length);
 
-    if (contractIDColumnIndexGS !== -1 && memberstackIDColumnIndexGS !== -1) {
-      for (let i = 1; i < allRowsGS.length; i++) {
+    // --- Save to Google Sheets (including editLink) ---
+    let rowIndex = -1;
+    const allRowsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!A:VM`, // Adjust range as needed
+    });
+    const allRows = allRowsResponse.data?.values || [];
+    const contractIDColumnIndex = headerRow.indexOf("contractID");
+    const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
+
+    if (contractIDColumnIndex !== -1 && memberstackIDColumnIndex !== -1) {
+      for (let i = 1; i < allRows.length; i++) {
         if (
-          allRowsGS[i][contractIDColumnIndexGS] === contractID &&
-          allRowsGS[i][memberstackIDColumnIndexGS] === formObject.MemberstackID
+          allRows[i][contractIDColumnIndex] === formObject.contractID &&
+          allRows[i][memberstackIDColumnIndex] === formObject.MemberstackID
         ) {
-          rowIndexGS = i + 1;
+          rowIndex = i + 1;
           await sheets.spreadsheets.values.update({
             spreadsheetId,
-            range: `${sheetName}!A${rowIndexGS}:${lastColumnLetter}${rowIndexGS}`,
+            range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
             valueInputOption: "RAW",
-            requestBody: { values: [valuesToWriteGS] },
+            requestBody: { values: [valuesToWrite] },
           });
-          console.log("Google Sheets row updated successfully (Draft)");
+          console.log("Row updated successfully (including editLink)");
           break;
         }
       }
-      if (rowIndexGS === -1) {
+      if (rowIndex === -1) {
         await sheets.spreadsheets.values.append({
           spreadsheetId,
           range: `${sheetName}!A:${lastColumnLetter}`,
           valueInputOption: "RAW",
-          requestBody: { values: [valuesToWriteGS] },
+          requestBody: { values: [valuesToWrite] },
         });
-        console.log("Google Sheets new row added successfully (Draft)");
+        console.log("New row added successfully (including editLink)");
+        rowIndex = allRows.length + 1; // Approximate new row index
       }
     } else {
       console.error(
-        "contractID or MemberstackID column not found in Google Sheets, cannot update/append (Draft)."
+        "contractID or MemberstackID column not found, cannot update/append."
       );
       return new NextResponse(
-        JSON.stringify({
-          error: "Could not update/append row in Google Sheets (Draft).",
-        }),
+        JSON.stringify({ error: "Could not update/append row." }),
         { status: 500, headers: responseHeaders }
       );
     }
 
-    // --- 3. Interact with Webflow API using utility ---
-    const webflowFieldData = mapFormDataToWebflowFields(formData);
-    webflowFieldData.editlink = editLink;
-    webflowFieldData.name = contractID;
-    webflowFieldData.slug = contractID;
+    // --- Interact with Webflow API ---
+    const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
+    if (webflowApiToken) {
+      const webflowCollectionId = process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
+      const itemNameFieldSlug = "name";
 
-    const webflowResult = await webflowUtility(contractID, webflowFieldData);
+      const fetchUrl = new URL(
+        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
+      );
+      fetchUrl.searchParams.set(itemNameFieldSlug, contractID);
 
-    if (webflowResult.success) {
+      const listItemsResponse = await fetch(fetchUrl.toString(), {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${webflowApiToken}`,
+          "accept-version": "2.0.0",
+        },
+      });
+      const listItemsData = await listItemsResponse.json();
+      const existingItem = listItemsData.items?.[0];
+
+      const fieldData = mapFormDataToWebflowFields(formData);
+      fieldData.editlink = editLink; // Ensure 'editlink' is set
+      fieldData.name = contractID; // Ensure 'name' is set correctly
+      fieldData.slug = contractID; // Ensure 'slug' is set correctly
+
+      let webflowResponse;
+      let requestBody;
+      const updateUrl = existingItem
+        ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
+        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well
+
+      const method = existingItem ? "PATCH" : "POST";
+
+      if (method === "POST") {
+        requestBody = {
+          fieldData: fieldData,
+        };
+      } else {
+        requestBody = {
+          fieldData: fieldData,
+          isArchived: false,
+          isDraft: false,
+        };
+      }
+
       console.log(
-        "Webflow interaction successful (Draft):",
-        webflowResult.data
+        `Webflow ${method} Request Body:`,
+        JSON.stringify(requestBody)
       );
-      return new NextResponse(
-        JSON.stringify({
-          message: "Draft saved successfully.",
-          webflow: webflowResult.data,
-        }),
-        { status: 200, headers: responseHeaders }
-      );
+
+      webflowResponse = await fetch(updateUrl, {
+        method: method,
+        headers: {
+          Authorization: `Bearer ${webflowApiToken}`,
+          "accept-version": "2.0.0",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const webflowResult = await webflowResponse.json();
+      console.log("Webflow API Response:", webflowResult);
+
+      if (!webflowResponse.ok) {
+        console.error("Error interacting with Webflow API:", webflowResult);
+        // Consider how to handle Webflow API errors
+      }
     } else {
-      console.error(
-        "Webflow interaction failed (Draft):",
-        webflowResult.error,
-        webflowResult.details
-      );
-      return new NextResponse(
-        JSON.stringify({
-          message: "Draft saved successfully, but Webflow interaction failed.",
-          webflowError: webflowResult.error,
-          webflowDetails: webflowResult.details,
-        }),
-        { status: 500, headers: responseHeaders }
-      );
+      console.warn("WEBFLOW_API_TOKEN not configured.");
     }
-  } catch (error) {
-    console.error("POST Error (Draft):", error);
+
     return new NextResponse(
-      JSON.stringify({ error: error.message, stack: error.stack }),
-      { status: 500, headers: responseHeaders }
+      JSON.stringify({ message: "Contract data processed successfully." }),
+      { status: 200, headers: responseHeaders }
     );
+  } catch (error) {
+    console.error("Error in Vercel POST:", error);
+    return new NextResponse(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: responseHeaders,
+    });
   }
 }
 
 function mapFormDataToWebflowFields(formData) {
   return {
-    editlink: "",
+    editlink: "", // Will be set in the main POST function
     denominacionlegallocadorpj1:
       formData["denominacionLegalLocadorPJ1"] || null,
     nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
     timestamp: formData["timestamp"] || null,
-    status: formData["status"] || null,
+    status: formData["status"] || null, // Map 'status'
     contrato: formData["Contrato"] || null,
     memberstackid: formData["MemberstackID"] || null,
-    name: formData["contractID"] || "",
-    slug: formData["contractID"] || "",
+    name: formData["contractID"] || "", // Directly use formData['contractID']
+    slug: formData["contractID"] || "", // Directly use formData['contractID']
     domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
     ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
     nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
@@ -192,8 +248,8 @@ function mapFormDataToWebflowFields(formData) {
       formData["hiddenInputLocacionFechaInicio"] || null,
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"] || null,
-    pdffile: formData["pdffile"] || null,
-    docfile: formData["docfile"] || null,
+    pdffile: formData["pdffile"] || null, // Map 'pdffile'
+    docfile: formData["docfile"] || null, // Map 'docfile'
   };
 }
 
