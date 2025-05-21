@@ -147,20 +147,25 @@ export async function POST(req) {
       const webflowCollectionId = process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
       const itemNameFieldSlug = "name";
 
-      const filterUrl = new URL(
-        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`
+      const fetchUrl = new URL(
+        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
       );
-      filterUrl.searchParams.set(itemNameFieldSlug, contractID);
+      fetchUrl.searchParams.set(itemNameFieldSlug, contractID);
 
-      const listItemsResponse = await fetch(filterUrl.toString(), {
+      const listItemsResponse = await fetch(fetchUrl.toString(), {
         method: "GET",
-        headers: { Authorization: `Bearer ${webflowApiToken}` },
+        headers: {
+          Authorization: `Bearer ${webflowApiToken}`,
+          "accept-version": "2.0.0",
+        },
       });
       const listItemsData = await listItemsResponse.json();
       const existingItem = listItemsData.items?.[0];
 
       const fieldData = mapFormDataToWebflowFields(formData);
       fieldData.editlink = editLink; // Ensure editlink is set
+      fieldData.name = contractID; // Ensure 'name' is set correctly
+      fieldData.slug = contractID; // Ensure 'slug' is set correctly
 
       let webflowResponse;
       let requestBody;
@@ -171,18 +176,10 @@ export async function POST(req) {
       const method = existingItem ? "PATCH" : "POST";
 
       if (method === "POST") {
-        // Try sending as an 'items' array for create, as the error suggests
         requestBody = {
-          items: [
-            {
-              fieldData: fieldData,
-              isArchived: false,
-              isDraft: false,
-            },
-          ],
+          fieldData: fieldData,
         };
       } else {
-        // For update, use the fieldData directly
         requestBody = {
           fieldData: fieldData,
           isArchived: false,
@@ -199,6 +196,7 @@ export async function POST(req) {
         method: method,
         headers: {
           Authorization: `Bearer ${webflowApiToken}`,
+          "accept-version": "2.0.0",
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
