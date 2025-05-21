@@ -228,7 +228,7 @@ export async function POST(req) {
               console.log("Google Sheets updated with DOC and PDF links.");
             }
 
-            // --- Interact with Webflow API (REPLICATING OTHER ENDPOINT'S APPROACH) ---
+            // --- Interact with Webflow API (EXACT APPROACH FROM OTHER ENDPOINT) ---
             const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
             if (
               webflowApiToken &&
