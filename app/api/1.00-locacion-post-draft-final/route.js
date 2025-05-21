@@ -158,21 +158,21 @@ export async function POST(req) {
       const listItemsData = await listItemsResponse.json();
       const existingItem = listItemsData.items?.[0];
 
-      const webflowFields = {
-        name: contractID,
-        slug: contractID,
-        editlink: editLink,
-        ...mapFormDataToWebflowFields(formData),
-      };
+      const webflowFields = mapFormDataToWebflowFields(formData);
+      webflowFields.editlink = editLink; // Ensure editlink is set
 
       let webflowResponse;
       const requestBody = { fields: webflowFields }; // Wrap fieldData in 'fields' for v2
 
       if (existingItem) {
+        console.log(
+          "Webflow Update Request Body:",
+          JSON.stringify(requestBody)
+        ); // Log update body
         webflowResponse = await fetch(
           `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}`,
           {
-            method: "PUT",
+            method: "PATCH", // Trying PATCH as per documentation
             headers: {
               Authorization: `Bearer ${webflowApiToken}`,
               "Content-Type": "application/json",
@@ -181,6 +181,10 @@ export async function POST(req) {
           }
         );
       } else {
+        console.log(
+          "Webflow Create Request Body:",
+          JSON.stringify(requestBody)
+        ); // Log create body
         webflowResponse = await fetch(
           `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`,
           {
@@ -297,26 +301,24 @@ export async function POST(req) {
 
 function mapFormDataToWebflowFields(formData) {
   return {
+    editlink: "", // Will be set in the main POST function
+    denominacionlegallocadorpj1: formData["denominacionLegalLocadorPJ1"],
+    nombrelocatariopf1: formData["nombreLocatarioPF1"],
+    timestamp: formData["timestamp"],
+    status: formData["status"],
+    contrato: formData["Contrato"],
+    memberstackid: formData["MemberstackID"],
+    name: formData["contractID"],
+    slug: formData["contractID"], // Let's explicitly include slug
     domicilioinmueblelocado: formData["domicilioInmuebleLocado"],
     ciudadinmueblelocado: formData["ciudadInmuebleLocado"],
     nombrelocadorpf1: formData["nombreLocadorPF1"],
-    denominacionlegallocadorpj1: formData["denominacionLegalLocadorPJ1"],
-    nombrelocatariopf1: formData["nombreLocatarioPF1"],
     denominacionlegallocatariopj1: formData["denominacionLegalLocatarioPJ1"],
     hiddeninputlocacionfechainicio: formData["hiddenInputLocacionFechaInicio"],
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"],
-    timestamp: formData["timestamp"],
-    pdffile: "", // These will likely be updated later, or might not be needed in Webflow directly
-    docfile: "",
-    status: formData["status"],
-    editlink: "", // This will be set directly in the main POST function
-    contrato: formData["Contrato"],
-    memberstackid: formData["MemberstackID"],
-    name: formData["contractID"], // 'name' field in Webflow is set to contractID
-    emailmember: formData["emailMember"],
-    emailguest: formData["emailGuest"],
-    // Add other mappings as needed
+    pdffile: "", // If needed
+    docfile: "", // If needed
   };
 }
 
