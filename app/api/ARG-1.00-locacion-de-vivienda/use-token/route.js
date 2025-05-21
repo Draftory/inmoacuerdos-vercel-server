@@ -236,6 +236,7 @@ export async function POST(req) {
             ) {
               const webflowCollectionId =
                 process.env.WEBFLOW_USER_COLLECTION_ID;
+              const itemNameFieldSlug = "name"; // Defined as per the working code
 
               // Create formData object from headerRow and rowDataToPass
               const formData = {};
@@ -252,7 +253,8 @@ export async function POST(req) {
               const fetchUrl = new URL(
                 `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
               );
-              fetchUrl.searchParams.set("name", contractID); // Assuming 'name' is the field to search by contractID
+              // Use itemNameFieldSlug for searching
+              fetchUrl.searchParams.set(itemNameFieldSlug, contractID);
 
               const listItemsResponse = await fetch(fetchUrl.toString(), {
                 method: "GET",
