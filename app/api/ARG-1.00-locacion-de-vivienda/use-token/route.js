@@ -1,15 +1,15 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
+import { webflowUtility } from "https://inmoacuerdos-vercel-server.vercel.app/api/Utilities/webflowGetUpdateCreate"; // Adjust path as needed
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
   "https://inmoacuerdos.webflow.io",
 ];
 
-// Environment variables
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_GENERATE_DOC_URL;
-const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET; // Asegúrate de que esta variable esté definida en Vercel
+const VERCEL_API_SECRET = process.env.VERCEL_API_SECRET;
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -28,9 +28,9 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log("Starting API request to Google Sheets for Token payment update");
+  console.log("Starting API request for Token payment success");
   const origin = req.headers.get("origin");
-  const headers = {
+  const responseHeaders = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
@@ -38,234 +38,197 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
-  // --- **IMPORTANT: Ensure VERCEL_API_SECRET is set in your Vercel Environment Variables** ---
   if (!VERCEL_API_SECRET && APPS_SCRIPT_URL) {
     console.warn(
-      "Warning: VERCEL_API_SECRET environment variable is not set in Vercel, but APPS_SCRIPT_URL is. The Google Apps Script will NOT be triggered."
+      "Warning: VERCEL_API_SECRET not set, Apps Script will NOT be triggered."
     );
   }
 
   try {
     const { contractID, memberstackID } = await req.json();
-    console.log("Received data for Token payment update (Server-Side):", {
+    console.log("Received data for payment success:", {
       contractID,
       memberstackID,
     });
 
     if (!contractID || !memberstackID) {
-      throw new Error(
-        "contractID and memberstackID are required in the request body."
-      );
+      throw new Error("contractID and memberstackID are required.");
     }
 
-    const googleCredentialsBase64 =
-      process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-
-    if (!googleCredentialsBase64) {
-      throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
-    }
-
-    const googleCredentialsJson = Buffer.from(
-      googleCredentialsBase64,
-      "base64"
-    ).toString("utf-8");
-    const credentials = JSON.parse(googleCredentialsJson);
-
-    console.log(
-      "GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use"
+    // --- Google Sheets Update (Payment Info) ---
+    const googleCredentials = JSON.parse(
+      Buffer.from(
+        process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET,
+        "base64"
+      ).toString("utf-8")
     );
-
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
-
     const client = await auth.getClient();
-    console.log("Authenticated with Google Sheets API");
-
     const sheets = google.sheets({ version: "v4", auth: client });
-
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-    console.log("Spreadsheet ID:", spreadsheetId);
-    console.log("Sheet Name:", sheetName);
-
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!1:1`,
     });
-
-    const headerRow = headerResponse.data?.values?.[0];
-    console.log("Header Row:", headerRow);
-
-    if (!headerRow || headerRow.length === 0) {
-      throw new Error("Header row not found in the spreadsheet.");
-    }
-
+    const headerRow = headerResponse.data?.values?.[0] || [];
     const contractIDColumnIndex = headerRow.indexOf("contractID");
     const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
     const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago");
     const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
     const paymentIdColumnIndex = headerRow.indexOf("payment_id");
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-
-    if (contractIDColumnIndex === -1) {
-      throw new Error("contractID column not found in the header.");
-    }
-    if (memberstackIDColumnIndex === -1) {
-      throw new Error("MemberstackID column not found in the header.");
-    }
-    if (tipoDePagoColumnIndex === -1) {
-      throw new Error("tipoDePago column not found in the header.");
-    }
-    if (estadoDePagoColumnIndex === -1) {
-      throw new Error("estadoDePago column not found in the header.");
-    }
-    if (paymentIdColumnIndex === -1) {
-      throw new Error("payment_id column not found in the header.");
-    }
-    if (fechaDePagoColumnIndex === -1) {
-      throw new Error("fechaDePago column not found in the header.");
-    }
-
-    // Retrieve all rows to search for matching contractID and MemberstackID
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`, // Adjust the range to cover all potential columns
+      range: `${sheetName}!A:VM`,
     });
-
     const allRows = allRowsResponse.data?.values || [];
-
-    // Find the row with the matching contractID and MemberstackID
     let rowIndex = -1;
     let rowDataToPass;
+
+    if (
+      contractIDColumnIndex === -1 ||
+      memberstackIDColumnIndex === -1 ||
+      tipoDePagoColumnIndex === -1 ||
+      estadoDePagoColumnIndex === -1 ||
+      paymentIdColumnIndex === -1 ||
+      fechaDePagoColumnIndex === -1
+    ) {
+      throw new Error("One or more required columns not found in the header.");
+    }
+
     for (let i = 1; i < allRows.length; i++) {
       if (
         allRows[i][contractIDColumnIndex] === contractID &&
         allRows[i][memberstackIDColumnIndex] === memberstackID
       ) {
-        rowIndex = i + 1; // +1 to account for header row and 1-based indexing
+        rowIndex = i + 1;
         rowDataToPass = allRows[i];
-        break;
-      }
-    }
-
-    if (rowIndex !== -1) {
-      const paymentId = uuidv4();
-      const nowArgentina = new Date().toLocaleString("en-US", {
-        timeZone: "America/Argentina/Buenos_Aires",
-      });
-
-      // Create an array to hold the updated values for the entire row
-      const updatedRowValues = allRows[rowIndex - 1] || []; // Get the existing row or an empty array
-
-      // Update the specific columns
-      updatedRowValues[tipoDePagoColumnIndex] = "Token";
-      updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
-      updatedRowValues[paymentIdColumnIndex] = paymentId;
-      updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
-
-      const lastColumnLetter = getColumnLetter(updatedRowValues.length);
-
-      // Update the entire row with the modified values
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [updatedRowValues],
-        },
-      });
-
-      console.log(
-        `Payment details updated for contractID: ${contractID} and MemberstackID: ${memberstackID} in row ${rowIndex}. Payment ID: ${paymentId}, Fecha de Pago: ${nowArgentina}`
-      );
-
-      // --- Trigger Google Apps Script function WITH secret in body ---
-      if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
-        try {
-          const response = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              secret: VERCEL_API_SECRET, // Incluir el secreto en el body
-              spreadsheetId: spreadsheetId,
-              sheetName: sheetName,
-              rowNumber: rowIndex,
-              rowData: rowDataToPass,
-              headers: headerRow,
-            }),
-          });
-
-          if (response.ok) {
-            const scriptResult = await response.json();
-            console.log(
-              "Google Apps Script triggered successfully (SECURE - Secreto en body):",
-              scriptResult
-            );
-          } else {
-            console.error(
-              "Error triggering Google Apps Script (SECURE - Secreto en body):",
-              response.status,
-              response.statusText
-            );
-            // Optionally handle the error
-          }
-        } catch (error) {
-          console.error(
-            "Error sending request to Google Apps Script (SECURE - Secreto en body):",
-            error
-          );
-          // Optionally handle the error
-        }
-      } else {
-        console.warn(
-          "APPS_SCRIPT_URL or VERCEL_API_SECRET environment variable not set. Skipping trigger of generateDocumentsForRow."
+        const paymentId = uuidv4();
+        const nowArgentina = new Date().toLocaleString("en-US", {
+          timeZone: "America/Argentina/Buenos_Aires",
+        });
+        const updatedRowValues = [...allRows[i]];
+        updatedRowValues[tipoDePagoColumnIndex] = "Token";
+        updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
+        updatedRowValues[paymentIdColumnIndex] = paymentId;
+        updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
+        const lastColumnLetter = getColumnLetter(updatedRowValues.length);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetName}!A${rowIndex}:${lastColumnLetter}${rowIndex}`,
+          valueInputOption: "RAW",
+          requestBody: { values: [updatedRowValues] },
+        });
+        console.log(
+          `Payment updated for contractID: ${contractID}, paymentId: ${paymentId}`
         );
-      }
-      // --- End Trigger ---
 
-      return new NextResponse(
-        JSON.stringify({
-          message: "Payment details updated successfully.",
-          paymentId: paymentId,
+        let appsScriptResult = {};
+        // --- Trigger Google Apps Script ---
+        if (APPS_SCRIPT_URL && VERCEL_API_SECRET) {
+          try {
+            const response = await fetch(APPS_SCRIPT_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                secret: VERCEL_API_SECRET,
+                spreadsheetId,
+                sheetName,
+                rowNumber: rowIndex,
+                rowData: rowDataToPass,
+                headers: headerRow,
+              }),
+            });
+            if (response.ok) {
+              appsScriptResult = await response.json();
+              console.log(
+                "Apps Script triggered successfully:",
+                appsScriptResult
+              );
+              // Apps Script should ideally return the PDF and DOC URLs
+            } else {
+              console.error(
+                "Error triggering Apps Script:",
+                response.status,
+                response.statusText,
+                await response.text()
+              );
+            }
+          } catch (error) {
+            console.error("Error sending request to Apps Script:", error);
+          }
+        } else {
+          console.warn(
+            "APPS_SCRIPT_URL or VERCEL_API_SECRET not set, skipping Apps Script trigger."
+          );
+        }
+
+        // --- Interact with Webflow API using utility ---
+        const webflowFieldData = {
+          estadoDePago: "Pagado", // Update payment status in Webflow
+          payment_id: paymentId,
           fechaDePago: nowArgentina,
-        }),
-        {
-          status: 200,
-          headers: headers,
+          pdffile: appsScriptResult?.pdfUrl || null, // Assuming Apps Script returns these
+          docfile: appsScriptResult?.docUrl || null,
+        };
+
+        const webflowUpdateResult = await webflowUtility(
+          contractID,
+          webflowFieldData
+        );
+
+        if (webflowUpdateResult.success) {
+          console.log(
+            "Webflow updated successfully after payment:",
+            webflowUpdateResult.data
+          );
+          return new NextResponse(
+            JSON.stringify({
+              message:
+                "Payment updated, Apps Script triggered, and Webflow updated.",
+              paymentId,
+            }),
+            { status: 200, headers }
+          );
+        } else {
+          console.error(
+            "Error updating Webflow after payment:",
+            webflowUpdateResult.error,
+            webflowUpdateResult.details
+          );
+          return new NextResponse(
+            JSON.stringify({
+              message:
+                "Payment updated and Apps Script triggered, but error updating Webflow.",
+              paymentId,
+              webflowError: webflowUpdateResult.error,
+              webflowDetails: webflowUpdateResult.details,
+            }),
+            { status: 500, headers }
+          );
         }
-      );
-    } else {
-      console.log(
-        `contractID: ${contractID} and MemberstackID: ${memberstackID} not found in the spreadsheet.`
-      );
-      return new NextResponse(
-        JSON.stringify({
-          error:
-            "Matching contractID and MemberstackID not found in the spreadsheet.",
-        }),
-        {
-          status: 404,
-          headers: headers,
-        }
-      );
+      }
     }
+
+    return new NextResponse(
+      JSON.stringify({
+        error: "Matching contractID and memberstackID not found.",
+      }),
+      { status: 404, headers }
+    );
   } catch (error) {
-    console.error("POST Error (Update Token Payment):", error);
+    console.error("POST Error (Payment Success):", error);
     return new NextResponse(
       JSON.stringify({ error: error.message, stack: error.stack }),
-      {
-        status: 500,
-        headers: headers,
-      }
+      { status: 500, headers }
     );
   }
 }
 
-// Function to convert column number to letter
 function getColumnLetter(columnNumber) {
   let columnLetter = "";
   let temp = columnNumber;
