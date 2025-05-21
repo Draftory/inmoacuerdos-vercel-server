@@ -158,45 +158,35 @@ export async function POST(req) {
       const listItemsData = await listItemsResponse.json();
       const existingItem = listItemsData.items?.[0];
 
-      const webflowFields = mapFormDataToWebflowFields(formData);
-      webflowFields.editlink = editLink; // Ensure editlink is set
+      const fieldData = mapFormDataToWebflowFields(formData);
+      fieldData.editlink = editLink; // Ensure editlink is set
 
       let webflowResponse;
-      const requestBody = { fields: webflowFields }; // Wrap fieldData in 'fields' for v2
+      const requestBody = {
+        fieldData: fieldData,
+        isArchived: false,
+        isDraft: false,
+      };
 
-      if (existingItem) {
-        console.log(
-          "Webflow Update Request Body:",
-          JSON.stringify(requestBody)
-        ); // Log update body
-        webflowResponse = await fetch(
-          `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}`,
-          {
-            method: "PATCH", // Trying PATCH as per documentation
-            headers: {
-              Authorization: `Bearer ${webflowApiToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(requestBody),
-          }
-        );
-      } else {
-        console.log(
-          "Webflow Create Request Body:",
-          JSON.stringify(requestBody)
-        ); // Log create body
-        webflowResponse = await fetch(
-          `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${webflowApiToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(requestBody),
-          }
-        );
-      }
+      const updateUrl = existingItem
+        ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
+        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well, to match potential implicit behavior of Apps Script
+
+      const method = existingItem ? "PATCH" : "POST";
+
+      console.log(
+        `Webflow ${method} Request Body:`,
+        JSON.stringify(requestBody)
+      );
+
+      webflowResponse = await fetch(updateUrl, {
+        method: method,
+        headers: {
+          Authorization: `Bearer ${webflowApiToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
       const webflowResult = await webflowResponse.json();
       console.log("Webflow API Response:", webflowResult);
@@ -302,23 +292,26 @@ export async function POST(req) {
 function mapFormDataToWebflowFields(formData) {
   return {
     editlink: "", // Will be set in the main POST function
-    denominacionlegallocadorpj1: formData["denominacionLegalLocadorPJ1"],
-    nombrelocatariopf1: formData["nombreLocatarioPF1"],
-    timestamp: formData["timestamp"],
-    status: formData["status"],
-    contrato: formData["Contrato"],
-    memberstackid: formData["MemberstackID"],
-    name: formData["contractID"],
-    slug: formData["contractID"], // Let's explicitly include slug
-    domicilioinmueblelocado: formData["domicilioInmuebleLocado"],
-    ciudadinmueblelocado: formData["ciudadInmuebleLocado"],
-    nombrelocadorpf1: formData["nombreLocadorPF1"],
-    denominacionlegallocatariopj1: formData["denominacionLegalLocatarioPJ1"],
-    hiddeninputlocacionfechainicio: formData["hiddenInputLocacionFechaInicio"],
+    denominacionlegallocadorpj1:
+      formData["denominacionLegalLocadorPJ1"] || null,
+    nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
+    timestamp: formData["timestamp"] || null,
+    status: formData["status"] || null,
+    contrato: formData["Contrato"] || null,
+    memberstackid: formData["MemberstackID"] || null,
+    name: formData["contractID"] || null,
+    slug: formData["contractID"] || null, // Ensure slug is included
+    domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
+    ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
+    nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
+    denominacionlegallocatariopj1:
+      formData["denominacionLegalLocatarioPJ1"] || null,
+    hiddeninputlocacionfechainicio:
+      formData["hiddenInputLocacionFechaInicio"] || null,
     hiddeninputlocacionfechatermino:
-      formData["hiddenInputLocacionFechaTermino"],
-    pdffile: "", // If needed
-    docfile: "", // If needed
+      formData["hiddenInputLocacionFechaTermino"] || null,
+    pdffile: null, // Explicitly set to null to match Apps Script if it was
+    docfile: null, // Explicitly set to null to match Apps Script if it was
   };
 }
 
