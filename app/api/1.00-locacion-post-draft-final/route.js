@@ -171,8 +171,8 @@ export async function POST(req) {
       let webflowResponse;
       let requestBody;
       const updateUrl = existingItem
-        ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
-        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`; // Use /live for create as well
+        ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
+        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
       const method = existingItem ? "PATCH" : "POST";
 
