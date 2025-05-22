@@ -114,6 +114,8 @@ export async function POST(req) {
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
+    // New: Index for Webflow Item ID in Google Sheet
+    const webflowItemIdColumnIndex = headerRow.indexOf("WebflowItemID");
 
     if (contractIDColumnIndex === -1)
       throw new Error("contractID column not found.");
@@ -129,6 +131,11 @@ export async function POST(req) {
       throw new Error("fechaDePago column not found.");
     if (pdfFileColumnIndex === -1) console.warn("PDFFile column not found.");
     if (docFileColumnIndex === -1) console.warn("DOCFile column not found.");
+    // Warn if WebflowItemID column is not found, but don't throw an error
+    if (webflowItemIdColumnIndex === -1)
+      console.warn(
+        "WebflowItemID column not found in Google Sheet. Webflow updates might rely on 'name' field search."
+      );
 
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -250,22 +257,67 @@ export async function POST(req) {
               fieldData.pdffile = pdfUrl;
               fieldData.docfile = docUrl;
 
-              const fetchUrl = new URL(
-                `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
-              );
-              // Use itemNameFieldSlug for searching
-              fetchUrl.searchParams.set(itemNameFieldSlug, contractID);
+              let existingItem = null;
+              let webflowItemIdFromSheet = null;
 
-              const listItemsResponse = await fetch(fetchUrl.toString(), {
-                method: "GET",
-                headers: {
-                  Authorization: `Bearer ${webflowApiToken}`,
-                  "accept-version": "2.0.0",
-                },
-              });
-              const listItemsData = await listItemsResponse.json();
-              const existingItem = listItemsData.items?.[0];
-              // Added a check to ensure existingItem has a valid _id before attempting PATCH
+              // Try to get Webflow Item ID from Google Sheet first
+              if (
+                webflowItemIdColumnIndex !== -1 &&
+                rowDataToPass[webflowItemIdColumnIndex]
+              ) {
+                webflowItemIdFromSheet =
+                  rowDataToPass[webflowItemIdColumnIndex];
+                console.log(
+                  `Attempting to fetch Webflow item directly using ID from sheet: ${webflowItemIdFromSheet}`
+                );
+                try {
+                  const directFetchUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${webflowItemIdFromSheet}`;
+                  const directItemResponse = await fetch(directFetchUrl, {
+                    method: "GET",
+                    headers: {
+                      Authorization: `Bearer ${webflowApiToken}`,
+                      "accept-version": "2.0.0",
+                    },
+                  });
+                  if (directItemResponse.ok) {
+                    existingItem = await directItemResponse.json();
+                    console.log(
+                      "Webflow item found directly using ID from sheet."
+                    );
+                  } else {
+                    console.warn(
+                      `Could not find Webflow item directly with ID ${webflowItemIdFromSheet}. Status: ${directItemResponse.status}`
+                    );
+                  }
+                } catch (error) {
+                  console.error(
+                    `Error fetching Webflow item directly by ID: ${error}`
+                  );
+                }
+              }
+
+              // If not found by ID from sheet, try searching by name (contractID)
+              if (!existingItem) {
+                console.log(
+                  `Webflow item not found by ID from sheet, attempting to search by name: ${contractID}`
+                );
+                const searchUrl = new URL(
+                  `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
+                );
+                searchUrl.searchParams.set(itemNameFieldSlug, contractID);
+
+                const listItemsResponse = await fetch(searchUrl.toString(), {
+                  method: "GET",
+                  headers: {
+                    Authorization: `Bearer ${webflowApiToken}`,
+                    "accept-version": "2.0.0",
+                  },
+                });
+                const listItemsData = await listItemsResponse.json();
+                console.log("Webflow search by name response:", listItemsData);
+                existingItem = listItemsData.items?.[0];
+              }
+
               const hasValidExistingItem = existingItem && existingItem._id;
 
               let webflowResponse;
@@ -274,7 +326,7 @@ export async function POST(req) {
                 ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem._id}/live`
                 : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
-              const method = hasValidExistingItem ? "PATCH" : "POST"; // Use hasValidExistingItem for method determination
+              const method = hasValidExistingItem ? "PATCH" : "POST";
 
               if (method === "POST") {
                 requestBody = {
@@ -310,6 +362,22 @@ export async function POST(req) {
                 console.error(
                   "Error interacting with Webflow API:",
                   webflowResult
+                );
+              } else if (
+                method === "POST" &&
+                webflowResult.id &&
+                webflowItemIdColumnIndex !== -1
+              ) {
+                // If a new item was created, update Google Sheet with its Webflow ID
+                const updateWebflowIdRange = `${sheetName}!${getColumnLetter(webflowItemIdColumnIndex + 1)}${rowIndex}`;
+                await sheets.spreadsheets.values.update({
+                  spreadsheetId,
+                  range: updateWebflowIdRange,
+                  valueInputOption: "RAW",
+                  requestBody: { values: [[webflowResult.id]] },
+                });
+                console.log(
+                  `Google Sheets updated with new Webflow Item ID: ${webflowResult.id}`
                 );
               }
             } else {
