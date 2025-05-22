@@ -282,7 +282,8 @@ export async function POST(req) {
                   if (directItemResponse.ok) {
                     existingItem = await directItemResponse.json();
                     console.log(
-                      "Webflow item found directly using ID from sheet."
+                      "Webflow item found directly using ID from sheet:",
+                      existingItem._id
                     );
                   } else {
                     console.warn(
@@ -306,6 +307,7 @@ export async function POST(req) {
                 );
                 searchUrl.searchParams.set(itemNameFieldSlug, contractID);
 
+                console.log("Webflow search URL:", searchUrl.toString());
                 const listItemsResponse = await fetch(searchUrl.toString(), {
                   method: "GET",
                   headers: {
@@ -313,9 +315,34 @@ export async function POST(req) {
                     "accept-version": "2.0.0",
                   },
                 });
+                console.log(
+                  "Webflow search response status:",
+                  listItemsResponse.status
+                );
                 const listItemsData = await listItemsResponse.json();
-                console.log("Webflow search by name response:", listItemsData);
-                existingItem = listItemsData.items?.[0];
+                console.log(
+                  "Raw Webflow search by name response data:",
+                  JSON.stringify(listItemsData, null, 2)
+                );
+
+                // **MODIFICACIÓN CLAVE AQUÍ**
+                // Webflow API para buscar items puede devolver un array 'items' o el item directamente si solo hay uno.
+                if (listItemsData.items && listItemsData.items.length > 0) {
+                  existingItem = listItemsData.items[0];
+                  console.log(
+                    "Found existing Webflow item via name search (from items array):",
+                    existingItem._id
+                  );
+                } else if (listItemsData && listItemsData._id) {
+                  // Check if the response itself is the item object
+                  existingItem = listItemsData;
+                  console.log(
+                    "Found existing Webflow item directly via name search:",
+                    existingItem._id
+                  );
+                } else {
+                  console.log("No existing Webflow item found with that name.");
+                }
               }
 
               const hasValidExistingItem = existingItem && existingItem._id;
