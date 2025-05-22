@@ -117,6 +117,7 @@ export async function POST(req) {
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
     const webflowItemIdColumnIndex = headerRow.indexOf("WebflowItemID");
+    const editlinkColumnIndex = headerRow.indexOf("editlink"); // Added editlink column index
 
     // Validate essential columns
     if (contractIDColumnIndex === -1)
@@ -139,6 +140,9 @@ export async function POST(req) {
       console.warn(
         "WebflowItemID column not found in Google Sheet. Webflow updates might rely on 'name' field search."
       );
+    if (editlinkColumnIndex === -1)
+      // Warn if editlink column is not found
+      console.warn("editlink column not found in Google Sheet.");
 
     // Fetch all rows to find the matching contract
     const allRowsResponse = await sheets.spreadsheets.values.get({
@@ -527,7 +531,7 @@ function getColumnLetter(columnNumber) {
 // Helper function to map form data from Google Sheet to Webflow field slugs
 function mapFormDataToWebflowFields(formData) {
   return {
-    editlink: "", // You might want to populate this dynamically if needed
+    editlink: formData["editlink"] || null, // Now dynamically pulling from formData
     denominacionlegallocadorpj1:
       formData["denominacionLegalLocadorPJ1"] || null,
     nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
