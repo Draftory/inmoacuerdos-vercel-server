@@ -56,9 +56,11 @@ export async function POST(req) {
     );
   }
 
+  // NOTE: RESEND_API_KEY is not directly used here for sending, but for the custom endpoint.
+  // The warning below is still relevant if the custom endpoint relies on it.
   if (!process.env.RESEND_API_KEY && process.env.RESEND_EMAIL_FROM) {
     console.warn(
-      "Warning: RESEND_API_KEY environment variable is not set in Vercel, but RESEND_EMAIL_FROM is. Emails will NOT be sent."
+      "Warning: RESEND_API_KEY environment variable is not set in Vercel, but RESEND_EMAIL_FROM is. Emails might not be sent correctly by the custom endpoint."
     );
   }
 
@@ -363,7 +365,7 @@ export async function POST(req) {
               let webflowResponse;
               let requestBody;
               const updateUrl = hasValidExistingItem
-                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
+                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live` // Corrected from existingItem._id
                 : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
               const method = hasValidExistingItem ? "PATCH" : "POST";
@@ -426,49 +428,127 @@ export async function POST(req) {
               );
             }
 
-            // Resend Email Integration
+            // --- MODIFICACIÓN: Resend Email Integration (con lógica de Apps Script) ---
             if (
-              process.env.RESEND_API_KEY &&
-              process.env.RESEND_EMAIL_FROM &&
-              pdfUrl &&
-              docUrl &&
-              !existingPaymentId
+              pdfUrl && // Ensure PDF URL is available
+              docUrl && // Ensure DOC URL is available
+              !existingPaymentId // Only send email if this is a new payment
             ) {
-              const emailData = {
-                to: emailMember || emailGuest,
-                from: process.env.RESEND_EMAIL_FROM,
-                subject: "Your Document is Ready!",
-                html: `<p>Here are the links to your documents:</p>
-                       <p><a href="${pdfUrl}">View PDF</a></p>
-                       <p><a href="${docUrl}">View DOC</a></p>`,
-              };
-              console.log("Sending email via Resend:", emailData);
               try {
-                const resendResponse = await fetch(
-                  "https://api.resend.com/emails",
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(emailData),
-                  }
+                // Obtener índices de columnas relevantes para el email
+                const emailMemberIndex = headerRow.indexOf("emailMember");
+                const emailGuestIndex = headerRow.indexOf("emailGuest");
+                const nombreLocatarioPF1Index =
+                  headerRow.indexOf("nombreLocatarioPF1");
+                const nombreLocadorPF1Index =
+                  headerRow.indexOf("nombreLocadorPF1");
+                const denominacionLegalLocadorPJ1Index = headerRow.indexOf(
+                  "denominacionLegalLocadorPJ1"
                 );
-                const resendResult = await resendResponse.json();
-                console.log("Resend API Response:", resendResult);
-                if (!resendResponse.ok) {
-                  console.error(
-                    "Error sending email via Resend:",
-                    resendResult
-                  );
+                const denominacionLegalLocatarioPJ1Index = headerRow.indexOf(
+                  "denominacionLegalLocatarioPJ1"
+                );
+
+                // Obtener valores de la fila actualizada (updatedRowValues)
+                const currentEmailMember =
+                  emailMemberIndex !== -1
+                    ? updatedRowValues[emailMemberIndex]
+                    : null;
+                const currentEmailGuest =
+                  emailGuestIndex !== -1
+                    ? updatedRowValues[emailGuestIndex]
+                    : null;
+                const nombreCliente =
+                  nombreLocatarioPF1Index !== -1
+                    ? updatedRowValues[nombreLocatarioPF1Index]
+                    : "Estimado/a usuario";
+
+                // Construir el asunto dinámicamente
+                let subject =
+                  "Tu Contrato de Locación de vivienda está listo - ";
+                let locadorInfo = "Locador Desconocido";
+                let locatarioInfo = "Locatario Desconocido";
+
+                if (nombreLocadorPF1Index !== -1) {
+                  locadorInfo = updatedRowValues[nombreLocadorPF1Index] || "";
                 }
+                if (denominacionLegalLocadorPJ1Index !== -1 && !locadorInfo) {
+                  locadorInfo =
+                    updatedRowValues[denominacionLegalLocadorPJ1Index] || "";
+                }
+
+                if (nombreLocatarioPF1Index !== -1) {
+                  locatarioInfo =
+                    updatedRowValues[nombreLocatarioPF1Index] || "";
+                }
+                if (
+                  denominacionLegalLocatarioPJ1Index !== -1 &&
+                  !locatarioInfo
+                ) {
+                  locatarioInfo =
+                    updatedRowValues[denominacionLegalLocatarioPJ1Index] || "";
+                }
+
+                subject += `${locadorInfo} - ${locatarioInfo}`;
+
+                const contractTypeDescription =
+                  "Contrato de Locación de vivienda";
+                const vercelApiUrl =
+                  "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase"; // Asegúrate de que esta URL sea correcta
+
+                const sendEmailToCustomEndpoint = async (toEmail) => {
+                  if (!toEmail) return; // No enviar si el email está vacío
+
+                  const payload = {
+                    to: toEmail,
+                    subject: subject,
+                    name: nombreCliente,
+                    linkPDF: pdfUrl, // Usar pdfUrl de la respuesta de Apps Script
+                    linkDOC: docUrl, // Usar docUrl de la respuesta de Apps Script
+                    contractTypeDescription: contractTypeDescription,
+                  };
+
+                  console.log(
+                    `Sending email to ${toEmail} via custom Vercel endpoint:`,
+                    payload
+                  );
+                  try {
+                    const response = await fetch(vercelApiUrl, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(payload),
+                    });
+                    const responseText = await response.text(); // Get text to log even if not JSON
+                    if (response.ok) {
+                      console.log(
+                        `Email sent to ${toEmail} via Vercel. Response: ${responseText}`
+                      );
+                    } else {
+                      console.error(
+                        `Error sending email to ${toEmail} via Vercel. Status: ${response.status}, Response: ${responseText}`
+                      );
+                    }
+                  } catch (error) {
+                    console.error(
+                      `Error sending email to ${toEmail} via Vercel:`,
+                      error
+                    );
+                  }
+                };
+
+                // Enviar email al miembro
+                await sendEmailToCustomEndpoint(currentEmailMember);
+                // Enviar email al invitado
+                await sendEmailToCustomEndpoint(currentEmailGuest);
               } catch (error) {
-                console.error("Error sending email via Resend:", error);
+                console.error(
+                  "Error in Resend Email Integration (custom endpoint):",
+                  error
+                );
               }
             } else {
               console.warn(
-                "Resend API key or email from not configured, or document URLs missing, or payment already processed. Skipping email sending."
+                "Document URLs missing or payment already processed. Skipping email sending via custom endpoint."
               );
             }
           } else {
