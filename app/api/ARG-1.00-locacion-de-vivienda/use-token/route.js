@@ -37,6 +37,7 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
+  // Environment variable warnings
   if (
     !process.env.VERCEL_API_SECRET &&
     process.env.APPS_SCRIPT_GENERATE_DOC_URL
@@ -101,6 +102,7 @@ export async function POST(req) {
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
 
+    // Fetch header row to find column indices
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!1:1`,
@@ -114,9 +116,9 @@ export async function POST(req) {
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
-    // New: Index for Webflow Item ID in Google Sheet
     const webflowItemIdColumnIndex = headerRow.indexOf("WebflowItemID");
 
+    // Validate essential columns
     if (contractIDColumnIndex === -1)
       throw new Error("contractID column not found.");
     if (memberstackIDColumnIndex === -1)
@@ -129,17 +131,19 @@ export async function POST(req) {
       throw new Error("payment_id column not found.");
     if (fechaDePagoColumnIndex === -1)
       throw new Error("fechaDePago column not found.");
+
+    // Warn for non-essential but useful columns
     if (pdfFileColumnIndex === -1) console.warn("PDFFile column not found.");
     if (docFileColumnIndex === -1) console.warn("DOCFile column not found.");
-    // Warn if WebflowItemID column is not found, but don't throw an error
     if (webflowItemIdColumnIndex === -1)
       console.warn(
         "WebflowItemID column not found in Google Sheet. Webflow updates might rely on 'name' field search."
       );
 
+    // Fetch all rows to find the matching contract
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`,
+      range: `${sheetName}!A:VM`, // Fetch a wide range to cover all potential columns
     });
     const allRows = allRowsResponse.data?.values || [];
 
@@ -151,20 +155,21 @@ export async function POST(req) {
         allRows[i][contractIDColumnIndex] === contractID &&
         allRows[i][memberstackIDColumnIndex] === memberstackID
       ) {
-        rowIndex = i + 1;
-        rowDataToPass = allRows[i];
+        rowIndex = i + 1; // Google Sheets row index is 1-based
+        rowDataToPass = allRows[i]; // Store the full row data
         existingPaymentId = allRows[i][paymentIdColumnIndex];
         break;
       }
     }
 
     if (rowIndex !== -1) {
+      // Update payment details in Google Sheet
       const paymentId = uuidv4();
       const nowArgentina = new Date().toLocaleString("en-US", {
         timeZone: "America/Argentina/Buenos_Aires",
       });
 
-      const updatedRowValues = allRows[rowIndex - 1] || [];
+      const updatedRowValues = allRows[rowIndex - 1] || []; // Get the current row data for update
       updatedRowValues[tipoDePagoColumnIndex] = "Token";
       updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
       updatedRowValues[paymentIdColumnIndex] = paymentId;
@@ -184,6 +189,7 @@ export async function POST(req) {
       );
 
       let appsScriptResponseData = {};
+      // Trigger document generation via Google Apps Script only if no existing payment ID
       if (
         !existingPaymentId &&
         process.env.APPS_SCRIPT_GENERATE_DOC_URL &&
@@ -217,12 +223,14 @@ export async function POST(req) {
             const pdfUrl = appsScriptResponseData?.pdfUrl;
             const docUrl = appsScriptResponseData?.docUrl;
 
+            // Update Google Sheets with DOC and PDF links if available
             if (
               pdfUrl &&
               docUrl &&
               pdfFileColumnIndex !== -1 &&
               docFileColumnIndex !== -1
             ) {
+              // Ensure the range covers both DOCFile and PDFFile columns
               const updateLinksRange = `${sheetName}!${getColumnLetter(docFileColumnIndex + 1)}${rowIndex}:${getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
               await sheets.spreadsheets.values.update({
                 spreadsheetId,
@@ -233,17 +241,18 @@ export async function POST(req) {
               console.log("Google Sheets updated with DOC and PDF links.");
             }
 
+            // Webflow Integration
             const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
             if (
               webflowApiToken &&
               process.env.WEBFLOW_USER_COLLECTION_ID &&
               pdfUrl &&
               docUrl &&
-              !existingPaymentId
+              !existingPaymentId // Only update/create in Webflow if this is a new payment
             ) {
               const webflowCollectionId =
                 process.env.WEBFLOW_USER_COLLECTION_ID;
-              const itemNameFieldSlug = "name";
+              const itemNameFieldSlug = "name"; // Assuming 'name' is the field used for contractID in Webflow
 
               // Create formData object from headerRow and rowDataToPass
               const formData = {};
@@ -260,7 +269,7 @@ export async function POST(req) {
               let existingItem = null;
               let webflowItemIdFromSheet = null;
 
-              // Try to get Webflow Item ID from Google Sheet first
+              // 1. Try to get Webflow Item ID from Google Sheet first
               if (
                 webflowItemIdColumnIndex !== -1 &&
                 rowDataToPass[webflowItemIdColumnIndex]
@@ -297,7 +306,7 @@ export async function POST(req) {
                 }
               }
 
-              // If not found by ID from sheet, try searching by name (contractID)
+              // 2. If not found by ID from sheet, try searching by name (contractID)
               if (!existingItem) {
                 console.log(
                   `Webflow item not found by ID from sheet, attempting to search by name: ${contractID}`
@@ -325,19 +334,11 @@ export async function POST(req) {
                   JSON.stringify(listItemsData, null, 2)
                 );
 
-                // **MODIFICACIÓN CLAVE AQUÍ**
-                // Webflow API para buscar items puede devolver un array 'items' o el item directamente si solo hay uno.
+                // IMPORTANT FIX: Only check the 'items' array for existing items
                 if (listItemsData.items && listItemsData.items.length > 0) {
                   existingItem = listItemsData.items[0];
                   console.log(
                     "Found existing Webflow item via name search (from items array):",
-                    existingItem._id
-                  );
-                } else if (listItemsData && listItemsData._id) {
-                  // Check if the response itself is the item object
-                  existingItem = listItemsData;
-                  console.log(
-                    "Found existing Webflow item directly via name search:",
                     existingItem._id
                   );
                 } else {
@@ -413,6 +414,7 @@ export async function POST(req) {
               );
             }
 
+            // Resend Email Integration
             if (
               process.env.RESEND_API_KEY &&
               process.env.RESEND_EMAIL_FROM &&
@@ -510,6 +512,7 @@ export async function POST(req) {
   }
 }
 
+// Helper function to convert column number to letter (e.g., 1 -> A, 27 -> AA)
 function getColumnLetter(columnNumber) {
   let columnLetter = "";
   let temp = columnNumber;
@@ -521,9 +524,10 @@ function getColumnLetter(columnNumber) {
   return columnLetter;
 }
 
+// Helper function to map form data from Google Sheet to Webflow field slugs
 function mapFormDataToWebflowFields(formData) {
   return {
-    editlink: "",
+    editlink: "", // You might want to populate this dynamically if needed
     denominacionlegallocadorpj1:
       formData["denominacionLegalLocadorPJ1"] || null,
     nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
@@ -531,8 +535,8 @@ function mapFormDataToWebflowFields(formData) {
     status: formData["status"] || null,
     contrato: formData["Contrato"] || null,
     memberstackid: formData["MemberstackID"] || null,
-    name: formData["contractID"] || "",
-    slug: formData["contractID"] || "",
+    name: formData["contractID"] || "", // 'name' field is crucial for search/identification
+    slug: formData["contractID"] || "", // 'slug' should generally be unique
     domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
     ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
     nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
@@ -542,7 +546,7 @@ function mapFormDataToWebflowFields(formData) {
       formData["hiddenInputLocacionFechaInicio"] || null,
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"] || null,
-    pdffile: formData["pdffile"] || null,
-    docfile: formData["docfile"] || null,
+    pdffile: formData["pdffile"] || null, // These will be overridden by actual URLs from Apps Script
+    docfile: formData["docfile"] || null, // These will be overridden by actual URLs from Apps Script
   };
 }
