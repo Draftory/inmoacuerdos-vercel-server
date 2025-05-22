@@ -148,7 +148,7 @@ export async function POST(req) {
     const allRows = allRowsResponse.data?.values || [];
 
     let rowIndex = -1;
-    let rowDataToPass;
+    let rowDataToPass; // This will hold the original row data before updates
     let existingPaymentId;
     for (let i = 1; i < allRows.length; i++) {
       if (
@@ -200,7 +200,7 @@ export async function POST(req) {
           spreadsheetId: spreadsheetId,
           sheetName: sheetName,
           rowNumber: rowIndex,
-          rowData: rowDataToPass,
+          rowData: rowDataToPass, // Still sending original rowDataToPass to Apps Script as it might expect it
           headers: headerRow,
         };
         console.log(
@@ -254,10 +254,10 @@ export async function POST(req) {
                 process.env.WEBFLOW_USER_COLLECTION_ID;
               const itemNameFieldSlug = "name"; // Assuming 'name' is the field used for contractID in Webflow
 
-              // Create formData object from headerRow and rowDataToPass
+              // Create formData object from headerRow and UPDATED row data
               const formData = {};
               headerRow.forEach((header, index) => {
-                formData[header] = rowDataToPass[index];
+                formData[header] = updatedRowValues[index]; // Use updatedRowValues here
               });
 
               // Map all fields from formData to Webflow fields
@@ -458,7 +458,7 @@ export async function POST(req) {
               console.warn(
                 "Resend API key or email from not configured, or document URLs missing, or payment already processed. Skipping email sending."
               );
-            } // Corrected: Removed extra ')' here
+            }
           } else {
             console.error(
               "Error calling Apps Script:",
