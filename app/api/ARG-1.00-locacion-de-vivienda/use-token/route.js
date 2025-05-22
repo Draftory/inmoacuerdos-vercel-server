@@ -117,7 +117,7 @@ export async function POST(req) {
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
     const webflowItemIdColumnIndex = headerRow.indexOf("WebflowItemID");
-    const editlinkColumnIndex = headerRow.indexOf("editlink"); // Added editlink column index
+    const editlinkColumnIndex = headerRow.indexOf("Editlink"); // Added editlink column index
 
     // Validate essential columns
     if (contractIDColumnIndex === -1)
