@@ -292,7 +292,7 @@ export async function POST(req) {
                     existingItem = await directItemResponse.json();
                     console.log(
                       "Webflow item found directly using ID from sheet:",
-                      existingItem.id // Corrected from ._id to .id
+                      existingItem.id
                     );
                   } else {
                     console.warn(
@@ -339,19 +339,19 @@ export async function POST(req) {
                   existingItem = listItemsData.items[0];
                   console.log(
                     "Found existing Webflow item via name search (from items array):",
-                    existingItem.id // Corrected from ._id to .id
+                    existingItem.id
                   );
                 } else {
                   console.log("No existing Webflow item found with that name.");
                 }
               }
 
-              const hasValidExistingItem = existingItem && existingItem.id; // Corrected from ._id to .id
+              const hasValidExistingItem = existingItem && existingItem.id;
 
               let webflowResponse;
               let requestBody;
               const updateUrl = hasValidExistingItem
-                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live` // Corrected from ._id to .id
+                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
                 : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
               const method = hasValidExistingItem ? "PATCH" : "POST";
@@ -458,7 +458,7 @@ export async function POST(req) {
               console.warn(
                 "Resend API key or email from not configured, or document URLs missing, or payment already processed. Skipping email sending."
               );
-            );
+            } // Corrected: Removed extra ')' here
           } else {
             console.error(
               "Error calling Apps Script:",
