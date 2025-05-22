@@ -117,7 +117,7 @@ export async function POST(req) {
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
     const webflowItemIdColumnIndex = headerRow.indexOf("WebflowItemID");
-    const editlinkColumnIndex = headerRow.indexOf("Editlink"); // Added editlink column index
+    const editlinkColumnIndex = headerRow.indexOf("Editlink"); // Modified to use "Editlink"
 
     // Validate essential columns
     if (contractIDColumnIndex === -1)
@@ -142,7 +142,7 @@ export async function POST(req) {
       );
     if (editlinkColumnIndex === -1)
       // Warn if editlink column is not found
-      console.warn("editlink column not found in Google Sheet.");
+      console.warn("Editlink column not found in Google Sheet."); // Updated warning message
 
     // Fetch all rows to find the matching contract
     const allRowsResponse = await sheets.spreadsheets.values.get({
@@ -269,6 +269,14 @@ export async function POST(req) {
               // Override pdffile and docfile with the actual URLs from Apps Script
               fieldData.pdffile = pdfUrl;
               fieldData.docfile = docUrl;
+
+              // MODIFICACIÓN: Asignar el editlink directamente desde rowDataToPass
+              if (
+                editlinkColumnIndex !== -1 &&
+                rowDataToPass[editlinkColumnIndex]
+              ) {
+                fieldData.editlink = rowDataToPass[editlinkColumnIndex];
+              }
 
               let existingItem = null;
               let webflowItemIdFromSheet = null;
