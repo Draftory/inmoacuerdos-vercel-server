@@ -37,12 +37,12 @@ export async function interactWithWebflow(
   pdfUrl,
   docUrl,
   rowDataToPass,
-  webflowItemIdColumnIndex,
+  // webflowItemIdColumnIndex, // Eliminamos este parámetro
   sheets,
   spreadsheetId,
   sheetName,
   rowIndex,
-  editlinkColumnIndex // Asegúrate de incluir este parámetro si lo usas
+  editlinkColumnIndex
 ) {
   if (!webflowApiToken || !webflowCollectionId || !pdfUrl || !docUrl) {
     console.warn(
@@ -67,44 +67,34 @@ export async function interactWithWebflow(
   }
 
   let existingItem = null;
-  let webflowItemIdFromSheet = null;
+  // let webflowItemIdFromSheet = null; // Eliminamos esta variable
 
-  if (
-    webflowItemIdColumnIndex !== -1 &&
-    rowDataToPass[webflowItemIdColumnIndex]
-  ) {
-    webflowItemIdFromSheet = rowDataToPass[webflowItemIdColumnIndex];
-    console.log(
-      `Attempting to fetch Webflow item directly using ID from sheet: ${webflowItemIdFromSheet}`
-    );
-    try {
-      const directFetchUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${webflowItemIdFromSheet}`;
-      const directItemResponse = await fetch(directFetchUrl, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${webflowApiToken}`,
-          "accept-version": "2.0.0",
-        },
-      });
-      if (directItemResponse.ok) {
-        existingItem = await directItemResponse.json();
-        console.log(
-          "Webflow item found directly using ID from sheet:",
-          existingItem.id
-        );
-      } else {
-        console.warn(
-          `Could not find Webflow item directly with ID ${webflowItemIdFromSheet}. Status: ${directItemResponse.status}`
-        );
-      }
-    } catch (error) {
-      console.error(`Error fetching Webflow item directly by ID: ${error}`);
-    }
-  }
+  // if (webflowItemIdColumnIndex !== -1 && rowDataToPass[webflowItemIdColumnIndex]) { // Eliminamos este bloque
+  //   webflowItemIdFromSheet = rowDataToPass[webflowItemIdColumnIndex];
+  //   console.log(`Attempting to fetch Webflow item directly using ID from sheet: ${webflowItemIdFromSheet}`);
+  //   try {
+  //     const directFetchUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${webflowItemIdFromSheet}`;
+  //     const directItemResponse = await fetch(directFetchUrl, {
+  //       method: "GET",
+  //       headers: {
+  //         Authorization: `Bearer ${webflowApiToken}`,
+  //         "accept-version": "2.0.0",
+  //       },
+  //     });
+  //     if (directItemResponse.ok) {
+  //       existingItem = await directItemResponse.json();
+  //       console.log("Webflow item found directly using ID from sheet:", existingItem.id);
+  //     } else {
+  //       console.warn(`Could not find Webflow item directly with ID ${webflowItemIdFromSheet}. Status: ${directItemResponse.status}`);
+  //     }
+  //   } catch (error) {
+  //     console.error(`Error fetching Webflow item directly by ID: ${error}`);
+  //   }
+  // }
 
   if (!existingItem) {
     console.log(
-      `Webflow item not found by ID from sheet, attempting to search by name: ${contractID}`
+      `Webflow item not found by ID from sheet (skipped), attempting to search by name: ${contractID}`
     );
     const searchUrl = new URL(
       `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
