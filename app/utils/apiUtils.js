@@ -67,30 +67,6 @@ export async function interactWithWebflow(
   }
 
   let existingItem = null;
-  // let webflowItemIdFromSheet = null; // Eliminamos esta variable
-
-  // if (webflowItemIdColumnIndex !== -1 && rowDataToPass[webflowItemIdColumnIndex]) { // Eliminamos este bloque
-  //   webflowItemIdFromSheet = rowDataToPass[webflowItemIdColumnIndex];
-  //   console.log(`Attempting to fetch Webflow item directly using ID from sheet: ${webflowItemIdFromSheet}`);
-  //   try {
-  //     const directFetchUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${webflowItemIdFromSheet}`;
-  //     const directItemResponse = await fetch(directFetchUrl, {
-  //       method: "GET",
-  //       headers: {
-  //         Authorization: `Bearer ${webflowApiToken}`,
-  //         "accept-version": "2.0.0",
-  //       },
-  //     });
-  //     if (directItemResponse.ok) {
-  //       existingItem = await directItemResponse.json();
-  //       console.log("Webflow item found directly using ID from sheet:", existingItem.id);
-  //     } else {
-  //       console.warn(`Could not find Webflow item directly with ID ${webflowItemIdFromSheet}. Status: ${directItemResponse.status}`);
-  //     }
-  //   } catch (error) {
-  //     console.error(`Error fetching Webflow item directly by ID: ${error}`);
-  //   }
-  // }
 
   if (!existingItem) {
     console.log(
@@ -173,15 +149,39 @@ export async function interactWithWebflow(
 }
 
 export async function sendEmailNotification(
-  toEmailMember,
-  toEmailGuest,
-  pdfUrl,
-  docUrl,
   updatedRowValues,
-  headerRow
+  headerRow,
+  pdfUrl,
+  docUrl
 ) {
   if (!pdfUrl || !docUrl) {
     console.warn("Document URLs missing. Skipping email sending.");
+    return;
+  }
+
+  const emailMemberColumnIndex = headerRow.indexOf("emailMember");
+  const emailGuestColumnIndex = headerRow.indexOf("emailGuest");
+  let toEmailMember = null;
+  let toEmailGuest = null;
+
+  if (emailMemberColumnIndex !== -1) {
+    toEmailMember = updatedRowValues[emailMemberColumnIndex];
+    console.log(
+      `Email del miembro obtenido de Google Sheets (sendEmailNotification): ${toEmailMember}`
+    );
+  }
+
+  if (emailGuestColumnIndex !== -1) {
+    toEmailGuest = updatedRowValues[emailGuestColumnIndex];
+    console.log(
+      `Email del invitado obtenido de Google Sheets (sendEmailNotification): ${toEmailGuest}`
+    );
+  }
+
+  if (!toEmailMember && !toEmailGuest) {
+    console.warn(
+      "No recipient emails found in Google Sheets data. Skipping email sending."
+    );
     return;
   }
 
@@ -205,20 +205,20 @@ export async function sendEmailNotification(
     locadorInfo = updatedRowValues[nombreLocadorPF1Index] || "";
   }
   if (denominacionLegalLocadorPJ1Index !== -1 && !locadorInfo) {
-    locadorInfo = updatedRowValues[denominacionLegalLocadorPJ1Index] || "";
+    locadorInfo = updatedRowValues[denominacionLegalLocadorpjIndex] || "";
   }
 
   if (nombreLocatarioPF1Index !== -1) {
     locatarioInfo = updatedRowValues[nombreLocatarioPF1Index] || "";
   }
   if (denominacionLegalLocatarioPJ1Index !== -1 && !locatarioInfo) {
-    locatarioInfo = updatedRowValues[denominacionLegalLocatarioPJ1Index] || "";
+    locatarioInfo = updatedRowValues[denominacionLegalLocatarioPJIndex] || "";
   }
 
   subject += `${locadorInfo} - ${locatarioInfo}`;
   const contractTypeDescription = "Contrato de LocaciÃ³n de vivienda";
   const vercelApiUrl =
-    "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase"; // Asegúrate de que esta URL sea correcta
+    "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase";
 
   const sendSingleEmail = async (toEmail) => {
     if (!toEmail) return;
@@ -232,28 +232,25 @@ export async function sendEmailNotification(
       contractTypeDescription: contractTypeDescription,
     };
 
-    console.log(
-      `Sending email to ${toEmail} via custom Vercel endpoint:`,
-      payload
-    );
     try {
       const response = await fetch(vercelApiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(payload),
       });
-      const responseText = await response.text();
-      if (response.ok) {
-        console.log(
-          `Email sent to ${toEmail} via Vercel. Response: ${responseText}`
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `Error sending email to ${toEmail}: ${response.status} - ${errorText}`
         );
       } else {
-        console.error(
-          `Error sending email to ${toEmail} via Vercel. Status: ${response.status}, Response: ${responseText}`
-        );
+        console.log(`Email sent successfully to ${toEmail}`);
       }
     } catch (error) {
-      console.error(`Error sending email to ${toEmail} via Vercel:`, error);
+      console.error(`Error sending email to ${toEmail}:`, error);
     }
   };
 
