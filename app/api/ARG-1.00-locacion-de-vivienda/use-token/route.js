@@ -35,9 +35,6 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log(
-    "Starting API request for Token payment update, document generation, Webflow update, and email"
-  );
   const origin = req.headers.get("origin");
   const responseHeaders = {
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
@@ -47,34 +44,14 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
-  // Environment variable warnings
-  if (
-    !process.env.VERCEL_API_SECRET &&
-    process.env.APPS_SCRIPT_GENERATE_DOC_URL
-  ) {
-    console.warn(
-      "Warning: VERCEL_API_SECRET environment variable is not set in Vercel, but APPS_SCRIPT_GENERATE_DOC_URL is. The Google Apps Script for document generation will NOT be triggered."
-    );
-  }
-  if (
-    !process.env.WEBFLOW_API_TOKEN &&
-    process.env.WEBFLOW_USER_COLLECTION_ID
-  ) {
-    console.warn(
-      "Warning: WEBFLOW_API_TOKEN environment variable is not set in Vercel, but WEBFLOW_USER_COLLECTION_ID is. Webflow will NOT be updated."
-    );
-  }
-  if (!process.env.RESEND_API_KEY && process.env.RESEND_EMAIL_FROM) {
-    console.warn(
-      "Warning: RESEND_API_KEY environment variable is not set in Vercel, but RESEND_EMAIL_FROM is. Emails might not be sent correctly by the custom endpoint."
-    );
-  }
-
   try {
     const { contractID, memberstackID } = await req.json();
-    console.log("Received data:", { contractID, memberstackID });
+    console.log(
+      `[use-token] Inicio del proceso para contractID: ${contractID}`
+    );
 
     if (!contractID || !memberstackID) {
+      console.error(`[use-token] Error: contractID o memberstackID faltantes.`);
       return createErrorResponse(
         "contractID and memberstackID are required.",
         400
@@ -86,7 +63,6 @@ export async function POST(req) {
     );
     const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
     const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-
     const headerRow = await getSheetHeaderRow(sheets, spreadsheetId, sheetName);
     const contractIDColumnIndex = headerRow.indexOf("contractID");
     const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
@@ -100,21 +76,17 @@ export async function POST(req) {
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
     const editlinkColumnIndex = headerRow.indexOf("Editlink");
 
-    if (
-      contractIDColumnIndex === -1 ||
-      memberstackIDColumnIndex === -1 ||
-      tipoDePagoColumnIndex === -1 ||
-      estadoDePagoColumnIndex === -1 ||
-      paymentIdColumnIndex === -1 ||
-      fechaDePagoColumnIndex === -1
-    ) {
+    if (contractIDColumnIndex === -1 || memberstackIDColumnIndex === -1) {
+      console.error(
+        `[use-token] Error: Columnas esenciales (contractID o MemberstackID) no encontradas en la hoja.`
+      );
       return createErrorResponse(
-        "One or more essential columns are missing in the Google Sheet.",
+        "Columnas esenciales no encontradas en la hoja de cálculo.",
         500
       );
     }
 
-    const { rowIndex, rowData: rowDataToPass } = await findRowByColumns(
+    const { rowIndex } = await findRowByColumns(
       sheets,
       spreadsheetId,
       sheetName,
@@ -123,13 +95,20 @@ export async function POST(req) {
     );
 
     if (rowIndex === -1) {
-      return createErrorResponse(
-        "Matching contractID and MemberstackID not found.",
-        404
+      console.warn(
+        `[use-token] Advertencia: No se encontró entrada para contractID: ${contractID} y memberstackID: ${memberstackID}.`
       );
+      return createErrorResponse("No se encontró entrada coincidente.", 404);
     }
 
-    const updatedRowValues = [...rowDataToPass];
+    const updatedRowValues = [
+      ...((
+        await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `${sheetName}!${rowIndex}:${rowIndex}`,
+        })
+      ).data?.values?.[0] || []),
+    ];
     const existingPaymentId = updatedRowValues[paymentIdColumnIndex];
     const paymentId = uuidv4();
     const nowArgentina = new Date().toLocaleString("en-US", {
@@ -149,25 +128,26 @@ export async function POST(req) {
       `A${rowIndex}:${lastColumnLetter}${rowIndex}`,
       updatedRowValues
     );
+    console.log(
+      `[use-token] Hoja de cálculo actualizada para contractID: ${contractID}`
+    );
 
-    let appsScriptResponseData = {};
     if (
       !existingPaymentId &&
       process.env.APPS_SCRIPT_GENERATE_DOC_URL &&
       process.env.VERCEL_API_SECRET
     ) {
+      console.log(
+        `[use-token] Solicitando generación de documentos para contractID: ${contractID}`
+      );
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
         spreadsheetId: spreadsheetId,
         sheetName: sheetName,
         rowNumber: rowIndex,
-        rowData: rowDataToPass,
+        rowData: updatedRowValues,
         headers: headerRow,
       };
-      console.log(
-        "Sending request to Apps Script for document generation:",
-        dataToSendToAppsScript
-      );
       try {
         const appsScriptResponse = await fetch(
           process.env.APPS_SCRIPT_GENERATE_DOC_URL,
@@ -178,20 +158,21 @@ export async function POST(req) {
           }
         );
         if (appsScriptResponse.ok) {
-          appsScriptResponseData = await appsScriptResponse.json();
-          console.log("Apps Script response:", appsScriptResponseData);
-
+          const appsScriptResponseData = await appsScriptResponse.json();
           const pdfUrl = appsScriptResponseData?.pdfUrl;
           const docUrl = appsScriptResponseData?.docUrl;
-          const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
+          console.log(
+            `[use-token] Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`
+          );
 
+          const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
           if (
             webflowApiToken &&
             process.env.WEBFLOW_USER_COLLECTION_ID &&
             pdfUrl &&
             docUrl
           ) {
-            await interactWithWebflow(
+            const webflowUpdateResult = await interactWithWebflow(
               contractID,
               webflowApiToken,
               process.env.WEBFLOW_USER_COLLECTION_ID,
@@ -206,9 +187,12 @@ export async function POST(req) {
               rowIndex,
               editlinkColumnIndex
             );
+            console.log(
+              `[use-token] Webflow actualizado para contractID: ${contractID}. Resultado: ${webflowUpdateResult ? "Éxito" : "Advertencia"}`
+            );
           } else {
             console.warn(
-              "WEBFLOW_API_TOKEN or collection ID not configured, or document URLs missing. Skipping Webflow update."
+              `[use-token] Advertencia: No se actualizará Webflow para contractID: ${contractID}.`
             );
           }
 
@@ -222,7 +206,7 @@ export async function POST(req) {
               : undefined;
 
           if (pdfUrl && docUrl && (emailMember || emailGuest)) {
-            await sendEmailNotification(
+            const emailSent = await sendEmailNotification(
               emailMember,
               emailGuest,
               pdfUrl,
@@ -230,43 +214,49 @@ export async function POST(req) {
               updatedRowValues,
               headerRow
             );
+            console.log(
+              `[use-token] Notificación de correo electrónico enviada para contractID: ${contractID}. Éxito: ${emailSent}`
+            );
           } else {
             console.warn(
-              "Document URLs missing or no recipient emails found in Google Sheet. Skipping email sending."
+              `[use-token] Advertencia: No se enviará notificación por correo electrónico para contractID: ${contractID}.`
             );
           }
         } else {
           console.error(
-            "Error calling Apps Script:",
-            appsScriptResponse.statusText,
-            await appsScriptResponse.text()
+            `[use-token] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
           );
         }
       } catch (error) {
-        console.error("Error sending request to Apps Script:", error);
+        console.error(
+          `[use-token] Error al interactuar con Apps Script para contractID: ${contractID}:`,
+          error
+        );
       }
     } else if (existingPaymentId) {
       console.log(
-        "Payment ID already exists. Skipping document generation, Webflow update, and email."
+        `[use-token] Pago existente encontrado para contractID: ${contractID}. Omitiendo generación y notificaciones.`
       );
     } else {
       console.warn(
-        "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured for document generation."
+        `[use-token] Advertencia: No se generarán documentos para contractID: ${contractID}. Configuración faltante.`
       );
     }
 
-    const successResponseData = {
+    console.log(
+      `[use-token] Proceso completado para contractID: ${contractID}`
+    );
+    return createSuccessResponse({
       message:
         "Payment details updated successfully, follow-up initiated (if applicable).",
       paymentId: paymentId,
       fechaDePago: nowArgentina,
-    };
-
-    return new NextResponse(JSON.stringify(successResponseData), {
-      status: 200,
-      headers: responseHeaders,
     });
   } catch (error) {
+    console.error(
+      `[use-token] Error general para contractID: ${contractID}:`,
+      error
+    );
     return createErrorResponse(error.message);
   }
 }
