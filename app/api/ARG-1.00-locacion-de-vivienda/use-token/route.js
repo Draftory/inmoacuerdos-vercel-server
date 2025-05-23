@@ -86,7 +86,7 @@ export async function POST(req) {
       );
     }
 
-    const { rowIndex } = await findRowByColumns(
+    const { rowIndex, rowData: rowDataToPass } = await findRowByColumns(
       sheets,
       spreadsheetId,
       sheetName,
@@ -101,14 +101,7 @@ export async function POST(req) {
       return createErrorResponse("No se encontró entrada coincidente.", 404);
     }
 
-    const updatedRowValues = [
-      ...((
-        await sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: `${sheetName}!${rowIndex}:${rowIndex}`,
-        })
-      ).data?.values?.[0] || []),
-    ];
+    const updatedRowValues = [...rowDataToPass];
     const existingPaymentId = updatedRowValues[paymentIdColumnIndex];
     const paymentId = uuidv4();
     const nowArgentina = new Date().toLocaleString("en-US", {
@@ -145,7 +138,7 @@ export async function POST(req) {
         spreadsheetId: spreadsheetId,
         sheetName: sheetName,
         rowNumber: rowIndex,
-        rowData: updatedRowValues,
+        rowData: rowDataToPass,
         headers: headerRow,
       };
       try {
@@ -180,7 +173,7 @@ export async function POST(req) {
               updatedRowValues,
               pdfUrl,
               docUrl,
-              rowDataToPass,
+              rowDataToPass, // ¡rowDataToPass ahora está definido aquí!
               sheets,
               spreadsheetId,
               sheetName,
