@@ -6,8 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import {
   interactWithWebflow,
   sendEmailNotification,
-} from "../../utils/apiUtils"; // Importa las funciones reutilizables
-import { getColumnLetter } from "../../utils/helpers"; // Importa la función helper
+} from "../../../utils/apiUtils"; // Importa las funciones reutilizables
+import { getColumnLetter } from "../../../utils/helpers"; // Importa la función helper
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
