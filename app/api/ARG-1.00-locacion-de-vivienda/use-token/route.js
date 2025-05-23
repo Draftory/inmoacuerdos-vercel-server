@@ -255,11 +255,16 @@ export async function POST(req) {
       );
     }
 
-    return createSuccessResponse({
+    const successResponseData = {
       message:
         "Payment details updated successfully, follow-up initiated (if applicable).",
       paymentId: paymentId,
       fechaDePago: nowArgentina,
+    };
+
+    return new NextResponse(JSON.stringify(successResponseData), {
+      status: 200,
+      headers: responseHeaders,
     });
   } catch (error) {
     return createErrorResponse(error.message);
