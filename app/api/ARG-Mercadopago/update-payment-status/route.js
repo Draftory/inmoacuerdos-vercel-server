@@ -294,9 +294,9 @@ export async function POST(req) {
 
       let appsScriptResponseData = {};
       // Trigger document generation via Google Apps Script
-      // Only if payment is approved, no existing payment ID, and Apps Script URL/Secret are configured
+      // Only if payment is "Pagado" (from webhook mapping), no existing payment ID, and Apps Script URL/Secret are configured
       if (
-        estadoDePago === "approved" &&
+        estadoDePagoToUse === "Pagado" && // Changed condition to check for "Pagado"
         !existingPaymentId &&
         APPS_SCRIPT_URL &&
         VERCEL_API_SECRET
