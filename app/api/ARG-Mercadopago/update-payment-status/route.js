@@ -217,16 +217,32 @@ export async function POST(req) {
     let rowDataToPass; // This will hold the original row data before updates
     let existingPaymentId; // To check if a payment ID already exists for this contract
 
+    // Trim the incoming contractID for robust comparison
+    const trimmedContractID = contractID.trim();
+    // Normalize incoming memberstackID: if it's null or empty string, treat as null
+    const normalizedIncomingMemberstackID =
+      memberstackID === null || memberstackID === ""
+        ? null
+        : String(memberstackID).trim();
+
     // Find the row matching the contractID and optionally memberstackID
     for (let i = 1; i < allRows.length; i++) {
-      // Use memberstackID for more precise matching if available, otherwise rely on contractID
-      const isMemberstackMatch =
-        memberstackIDColumnIndex !== -1
-          ? allRows[i][memberstackIDColumnIndex] === memberstackID
-          : true;
+      const sheetContractID = allRows[i][contractIDColumnIndex]?.trim(); // Trim sheet contractID, handle undefined/null
+
+      let normalizedSheetMemberstackID = null;
+      if (memberstackIDColumnIndex !== -1) {
+        const rawSheetMemberstackID = allRows[i][memberstackIDColumnIndex];
+        normalizedSheetMemberstackID =
+          rawSheetMemberstackID === null || rawSheetMemberstackID === ""
+            ? null
+            : String(rawSheetMemberstackID).trim();
+      }
+
+      // Compare trimmed contractIDs and normalized memberstackIDs
       if (
-        allRows[i][contractIDColumnIndex] === contractID &&
-        isMemberstackMatch
+        sheetContractID === trimmedContractID &&
+        (memberstackIDColumnIndex === -1 ||
+          normalizedSheetMemberstackID === normalizedIncomingMemberstackID)
       ) {
         rowIndex = i + 1; // Google Sheets row index is 1-based
         rowDataToPass = allRows[i]; // Store the full row data
