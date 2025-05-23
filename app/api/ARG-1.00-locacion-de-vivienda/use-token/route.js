@@ -71,14 +71,8 @@ export async function POST(req) {
   }
 
   try {
-    const { contractID, memberstackID, emailMember, emailGuest } =
-      await req.json();
-    console.log("Received data:", {
-      contractID,
-      memberstackID,
-      emailMember,
-      emailGuest,
-    });
+    const { contractID, memberstackID } = await req.json();
+    console.log("Received data:", { contractID, memberstackID });
 
     if (!contractID || !memberstackID) {
       throw new Error(
@@ -124,7 +118,9 @@ export async function POST(req) {
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
-    const editlinkColumnIndex = headerRow.indexOf("Editlink"); // Modified to use "Editlink"
+    const editlinkColumnIndex = headerRow.indexOf("Editlink");
+    const emailMemberColumnIndex = headerRow.indexOf("emailMember");
+    const emailGuestColumnIndex = headerRow.indexOf("emailGuest");
 
     // Validate essential columns
     if (contractIDColumnIndex === -1)
@@ -144,8 +140,11 @@ export async function POST(req) {
     if (pdfFileColumnIndex === -1) console.warn("PDFFile column not found.");
     if (docFileColumnIndex === -1) console.warn("DOCFile column not found.");
     if (editlinkColumnIndex === -1)
-      // Warn if editlink column is not found
-      console.warn("Editlink column not found in Google Sheet."); // Updated warning message
+      console.warn("Editlink column not found in Google Sheet.");
+    if (emailMemberColumnIndex === -1)
+      console.warn("emailMember column not found in Google Sheet.");
+    if (emailGuestColumnIndex === -1)
+      console.warn("emailGuest column not found in Google Sheet.");
 
     // Fetch all rows to find the matching contract
     const allRowsResponse = await sheets.spreadsheets.values.get({
@@ -278,14 +277,35 @@ export async function POST(req) {
               );
             }
 
-            // --- MODIFICACIÓN: Resend Email Integration (con lógica de Apps Script) ---
-            // Agregando logging para depurar el envío de email
+            // --- MODIFICACIÓN: Resend Email Integration (obtener emails de GSheets directamente) ---
             console.log(`[Route] Checking conditions for email sending:`);
             console.log(`[Route] pdfUrl: ${pdfUrl}`);
             console.log(`[Route] docUrl: ${docUrl}`);
             console.log(`[Route] existingPaymentId: ${existingPaymentId}`);
-            console.log(`[Route] emailMember (from request): ${emailMember}`);
-            console.log(`[Route] emailGuest (from request): ${emailGuest}`);
+
+            let emailMember;
+            if (emailMemberColumnIndex !== -1) {
+              emailMember = updatedRowValues[emailMemberColumnIndex];
+              console.log(
+                `[Route] emailMember fetched from updatedRowValues: ${emailMember}`
+              );
+            } else {
+              console.warn(
+                "[Route] emailMember column not found, cannot send email to member."
+              );
+            }
+
+            let emailGuest;
+            if (emailGuestColumnIndex !== -1) {
+              emailGuest = updatedRowValues[emailGuestColumnIndex];
+              console.log(
+                `[Route] emailGuest fetched from updatedRowValues: ${emailGuest}`
+              );
+            } else {
+              console.warn(
+                "[Route] emailGuest column not found, cannot send email to guest."
+              );
+            }
 
             if (
               pdfUrl && // Ensure PDF URL is available
