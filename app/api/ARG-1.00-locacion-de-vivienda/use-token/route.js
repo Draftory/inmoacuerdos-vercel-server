@@ -1,4 +1,4 @@
-// app/api/ARG-1.00-locacion-de-vivienda/use-token/route.js
+// app/api/use-token/route.js
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import fetch from "node-fetch";
@@ -6,8 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import {
   interactWithWebflow,
   sendEmailNotification,
-} from "../../../../utils/apiUtils";
-import { getColumnLetter } from "../../../../utils/helpers";
+} from "../../../utils/apiUtils"; // Importa las funciones reutilizables
+import { getColumnLetter } from "../../../utils/helpers"; // Importa la función helper
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -71,8 +71,14 @@ export async function POST(req) {
   }
 
   try {
-    const { contractID, memberstackID } = await req.json();
-    console.log("Received data:", { contractID, memberstackID });
+    const { contractID, memberstackID, emailMember, emailGuest } =
+      await req.json();
+    console.log("Received data:", {
+      contractID,
+      memberstackID,
+      emailMember,
+      emailGuest,
+    });
 
     if (!contractID || !memberstackID) {
       throw new Error(
@@ -118,7 +124,7 @@ export async function POST(req) {
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
-    const editlinkColumnIndex = headerRow.indexOf("Editlink");
+    const editlinkColumnIndex = headerRow.indexOf("Editlink"); // Modified to use "Editlink"
 
     // Validate essential columns
     if (contractIDColumnIndex === -1)
@@ -138,7 +144,8 @@ export async function POST(req) {
     if (pdfFileColumnIndex === -1) console.warn("PDFFile column not found.");
     if (docFileColumnIndex === -1) console.warn("DOCFile column not found.");
     if (editlinkColumnIndex === -1)
-      console.warn("Editlink column not found in Google Sheet.");
+      // Warn if editlink column is not found
+      console.warn("Editlink column not found in Google Sheet."); // Updated warning message
 
     // Fetch all rows to find the matching contract
     const allRowsResponse = await sheets.spreadsheets.values.get({
@@ -195,6 +202,18 @@ export async function POST(req) {
         process.env.APPS_SCRIPT_GENERATE_DOC_URL &&
         process.env.VERCEL_API_SECRET
       ) {
+        const dataToSendToAppsScript = {
+          secret: process.env.VERCEL_API_SECRET,
+          spreadsheetId: spreadsheetId,
+          sheetName: sheetName,
+          rowNumber: rowIndex,
+          rowData: rowDataToPass, // Still sending original rowDataToPass to Apps Script as it might expect it
+          headers: headerRow,
+        };
+        console.log(
+          "Sending request to Apps Script for document generation:",
+          dataToSendToAppsScript
+        );
         try {
           const appsScriptResponse = await fetch(
             process.env.APPS_SCRIPT_GENERATE_DOC_URL,
@@ -206,6 +225,8 @@ export async function POST(req) {
           );
           if (appsScriptResponse.ok) {
             appsScriptResponseData = await appsScriptResponse.json();
+            console.log("Apps Script response:", appsScriptResponseData);
+
             const pdfUrl = appsScriptResponseData?.pdfUrl;
             const docUrl = appsScriptResponseData?.docUrl;
 
@@ -216,6 +237,7 @@ export async function POST(req) {
               pdfFileColumnIndex !== -1 &&
               docFileColumnIndex !== -1
             ) {
+              // Ensure the range covers both DOCFile and PDFFile columns
               const updateLinksRange = `${sheetName}!${getColumnLetter(docFileColumnIndex + 1)}${rowIndex}:${getColumnLetter(pdfFileColumnIndex + 1)}${rowIndex}`;
               await sheets.spreadsheets.values.update({
                 spreadsheetId,
@@ -256,13 +278,19 @@ export async function POST(req) {
               );
             }
 
-            // Resend Email Integration
-            if (pdfUrl && docUrl && !existingPaymentId) {
+            // --- MODIFICACIÃ“N: Resend Email Integration (con lÃ³gica de Apps Script) ---
+            if (
+              pdfUrl && // Ensure PDF URL is available
+              docUrl && // Ensure DOC URL is available
+              !existingPaymentId // Only send email if this is a new payment
+            ) {
               await sendEmailNotification(
-                updatedRowValues,
-                headerRow,
+                emailMember,
+                emailGuest,
                 pdfUrl,
-                docUrl
+                docUrl,
+                updatedRowValues,
+                headerRow
               );
             } else {
               console.warn(
@@ -277,18 +305,13 @@ export async function POST(req) {
             );
           }
         } catch (error) {
-          console.error("Error during Apps Script call:", error);
+          console.error("Error sending request to Apps Script:", error);
         }
-      }
-
-      if (existingPaymentId) {
+      } else if (existingPaymentId) {
         console.log(
           "Payment ID already exists. Skipping document generation, Webflow update, and email."
         );
-      } else if (
-        !process.env.APPS_SCRIPT_GENERATE_DOC_URL ||
-        !process.env.VERCEL_API_SECRET
-      ) {
+      } else {
         console.warn(
           "APPS_SCRIPT_GENERATE_DOC_URL or VERCEL_API_SECRET not configured for document generation."
         );

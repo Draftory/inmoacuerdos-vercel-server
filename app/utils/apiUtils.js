@@ -37,7 +37,6 @@ export async function interactWithWebflow(
   pdfUrl,
   docUrl,
   rowDataToPass,
-  // webflowItemIdColumnIndex, // Eliminamos este parámetro
   sheets,
   spreadsheetId,
   sheetName,
@@ -149,39 +148,15 @@ export async function interactWithWebflow(
 }
 
 export async function sendEmailNotification(
-  updatedRowValues,
-  headerRow,
+  toEmailMember,
+  toEmailGuest,
   pdfUrl,
-  docUrl
+  docUrl,
+  updatedRowValues,
+  headerRow
 ) {
   if (!pdfUrl || !docUrl) {
     console.warn("Document URLs missing. Skipping email sending.");
-    return;
-  }
-
-  const emailMemberColumnIndex = headerRow.indexOf("emailMember");
-  const emailGuestColumnIndex = headerRow.indexOf("emailGuest");
-  let toEmailMember = null;
-  let toEmailGuest = null;
-
-  if (emailMemberColumnIndex !== -1) {
-    toEmailMember = updatedRowValues[emailMemberColumnIndex];
-    console.log(
-      `Email del miembro obtenido de Google Sheets (sendEmailNotification): ${toEmailMember}`
-    );
-  }
-
-  if (emailGuestColumnIndex !== -1) {
-    toEmailGuest = updatedRowValues[emailGuestColumnIndex];
-    console.log(
-      `Email del invitado obtenido de Google Sheets (sendEmailNotification): ${toEmailGuest}`
-    );
-  }
-
-  if (!toEmailMember && !toEmailGuest) {
-    console.warn(
-      "No recipient emails found in Google Sheets data. Skipping email sending."
-    );
     return;
   }
 
@@ -205,20 +180,20 @@ export async function sendEmailNotification(
     locadorInfo = updatedRowValues[nombreLocadorPF1Index] || "";
   }
   if (denominacionLegalLocadorPJ1Index !== -1 && !locadorInfo) {
-    locadorInfo = updatedRowValues[denominacionLegalLocadorpjIndex] || "";
+    locadorInfo = updatedRowValues[denominacionLegalLocadorPJ1Index] || "";
   }
 
   if (nombreLocatarioPF1Index !== -1) {
     locatarioInfo = updatedRowValues[nombreLocatarioPF1Index] || "";
   }
   if (denominacionLegalLocatarioPJ1Index !== -1 && !locatarioInfo) {
-    locatarioInfo = updatedRowValues[denominacionLegalLocatarioPJIndex] || "";
+    locatarioInfo = updatedRowValues[denominacionLegalLocatarioPJ1Index] || "";
   }
 
   subject += `${locadorInfo} - ${locatarioInfo}`;
   const contractTypeDescription = "Contrato de LocaciÃ³n de vivienda";
   const vercelApiUrl =
-    "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase";
+    "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase"; // Asegúrate de que esta URL sea correcta
 
   const sendSingleEmail = async (toEmail) => {
     if (!toEmail) return;
@@ -232,25 +207,28 @@ export async function sendEmailNotification(
       contractTypeDescription: contractTypeDescription,
     };
 
+    console.log(
+      `Sending email to ${toEmail} via custom Vercel endpoint:`,
+      payload
+    );
     try {
       const response = await fetch(vercelApiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `Error sending email to ${toEmail}: ${response.status} - ${errorText}`
+      const responseText = await response.text();
+      if (response.ok) {
+        console.log(
+          `Email sent to ${toEmail} via Vercel. Response: ${responseText}`
         );
       } else {
-        console.log(`Email sent successfully to ${toEmail}`);
+        console.error(
+          `Error sending email to ${toEmail} via Vercel. Status: ${response.status}, Response: ${responseText}`
+        );
       }
     } catch (error) {
-      console.error(`Error sending email to ${toEmail}:`, error);
+      console.error(`Error sending email to ${toEmail} via Vercel:`, error);
     }
   };
 
