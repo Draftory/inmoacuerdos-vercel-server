@@ -1,7 +1,13 @@
+// app/api/use-token/route.js
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import fetch from "node-fetch";
 import { v4 as uuidv4 } from "uuid";
+import {
+  interactWithWebflow,
+  sendEmailNotification,
+} from "../../../utils/apiUtils"; // Importa las funciones reutilizables
+import { getColumnLetter } from "../../../utils/helpers"; // Importa la función helper
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -256,296 +262,42 @@ export async function POST(req) {
               docUrl &&
               !existingPaymentId // Only update/create in Webflow if this is a new payment
             ) {
-              const webflowCollectionId =
-                process.env.WEBFLOW_USER_COLLECTION_ID;
-              const itemNameFieldSlug = "name"; // Assuming 'name' is the field used for contractID in Webflow
-
-              // Create formData object from headerRow and UPDATED row data
-              const formData = {};
-              headerRow.forEach((header, index) => {
-                formData[header] = updatedRowValues[index]; // Use updatedRowValues here
-              });
-
-              // Map all fields from formData to Webflow fields
-              const fieldData = mapFormDataToWebflowFields(formData);
-              // Override pdffile and docfile with the actual URLs from Apps Script
-              fieldData.pdffile = pdfUrl;
-              fieldData.docfile = docUrl;
-
-              // MODIFICACIÓN: Asignar el editlink directamente desde rowDataToPass
-              if (
-                editlinkColumnIndex !== -1 &&
-                rowDataToPass[editlinkColumnIndex]
-              ) {
-                fieldData.editlink = rowDataToPass[editlinkColumnIndex];
-              }
-
-              let existingItem = null;
-              let webflowItemIdFromSheet = null;
-
-              // 1. Try to get Webflow Item ID from Google Sheet first
-              if (
-                webflowItemIdColumnIndex !== -1 &&
-                rowDataToPass[webflowItemIdColumnIndex]
-              ) {
-                webflowItemIdFromSheet =
-                  rowDataToPass[webflowItemIdColumnIndex];
-                console.log(
-                  `Attempting to fetch Webflow item directly using ID from sheet: ${webflowItemIdFromSheet}`
-                );
-                try {
-                  const directFetchUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${webflowItemIdFromSheet}`;
-                  const directItemResponse = await fetch(directFetchUrl, {
-                    method: "GET",
-                    headers: {
-                      Authorization: `Bearer ${webflowApiToken}`,
-                      "accept-version": "2.0.0",
-                    },
-                  });
-                  if (directItemResponse.ok) {
-                    existingItem = await directItemResponse.json();
-                    console.log(
-                      "Webflow item found directly using ID from sheet:",
-                      existingItem.id
-                    );
-                  } else {
-                    console.warn(
-                      `Could not find Webflow item directly with ID ${webflowItemIdFromSheet}. Status: ${directItemResponse.status}`
-                    );
-                  }
-                } catch (error) {
-                  console.error(
-                    `Error fetching Webflow item directly by ID: ${error}`
-                  );
-                }
-              }
-
-              // 2. If not found by ID from sheet, try searching by name (contractID)
-              if (!existingItem) {
-                console.log(
-                  `Webflow item not found by ID from sheet, attempting to search by name: ${contractID}`
-                );
-                const searchUrl = new URL(
-                  `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
-                );
-                searchUrl.searchParams.set(itemNameFieldSlug, contractID);
-
-                console.log("Webflow search URL:", searchUrl.toString());
-                const listItemsResponse = await fetch(searchUrl.toString(), {
-                  method: "GET",
-                  headers: {
-                    Authorization: `Bearer ${webflowApiToken}`,
-                    "accept-version": "2.0.0",
-                  },
-                });
-                console.log(
-                  "Webflow search response status:",
-                  listItemsResponse.status
-                );
-                const listItemsData = await listItemsResponse.json();
-                console.log(
-                  "Raw Webflow search by name response data:",
-                  JSON.stringify(listItemsData, null, 2)
-                );
-
-                // IMPORTANT FIX: Only check the 'items' array for existing items
-                if (listItemsData.items && listItemsData.items.length > 0) {
-                  existingItem = listItemsData.items[0];
-                  console.log(
-                    "Found existing Webflow item via name search (from items array):",
-                    existingItem.id
-                  );
-                } else {
-                  console.log("No existing Webflow item found with that name.");
-                }
-              }
-
-              const hasValidExistingItem = existingItem && existingItem.id;
-
-              let webflowResponse;
-              let requestBody;
-              const updateUrl = hasValidExistingItem
-                ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live` // Corrected from existingItem._id
-                : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
-
-              const method = hasValidExistingItem ? "PATCH" : "POST";
-
-              if (method === "POST") {
-                requestBody = {
-                  fieldData: fieldData,
-                };
-              } else {
-                requestBody = {
-                  fieldData: fieldData,
-                  isArchived: false,
-                  isDraft: false,
-                };
-              }
-
-              console.log(
-                `Webflow ${method} Request Body:`,
-                JSON.stringify(requestBody)
+              await interactWithWebflow(
+                contractID,
+                webflowApiToken,
+                process.env.WEBFLOW_USER_COLLECTION_ID,
+                headerRow,
+                updatedRowValues,
+                pdfUrl,
+                docUrl,
+                rowDataToPass,
+                webflowItemIdColumnIndex,
+                sheets,
+                spreadsheetId,
+                sheetName,
+                rowIndex,
+                editlinkColumnIndex
               );
-
-              webflowResponse = await fetch(updateUrl, {
-                method: method,
-                headers: {
-                  Authorization: `Bearer ${webflowApiToken}`,
-                  "accept-version": "2.0.0",
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(requestBody),
-              });
-
-              const webflowResult = await webflowResponse.json();
-              console.log("Webflow API Response:", webflowResult);
-
-              if (!webflowResponse.ok) {
-                console.error(
-                  "Error interacting with Webflow API:",
-                  webflowResult
-                );
-              } else if (
-                method === "POST" &&
-                webflowResult.id &&
-                webflowItemIdColumnIndex !== -1
-              ) {
-                // If a new item was created, update Google Sheet with its Webflow ID
-                const updateWebflowIdRange = `${sheetName}!${getColumnLetter(webflowItemIdColumnIndex + 1)}${rowIndex}`;
-                await sheets.spreadsheets.values.update({
-                  spreadsheetId,
-                  range: updateWebflowIdRange,
-                  valueInputOption: "RAW",
-                  requestBody: { values: [[webflowResult.id]] },
-                });
-                console.log(
-                  `Google Sheets updated with new Webflow Item ID: ${webflowResult.id}`
-                );
-              }
             } else {
               console.warn(
                 "WEBFLOW_API_TOKEN or collection ID not configured, or document URLs missing, or payment already processed. Skipping Webflow update."
               );
             }
 
-            // --- MODIFICACIÓN: Resend Email Integration (con lógica de Apps Script) ---
+            // --- MODIFICACIÃ“N: Resend Email Integration (con lÃ³gica de Apps Script) ---
             if (
               pdfUrl && // Ensure PDF URL is available
               docUrl && // Ensure DOC URL is available
               !existingPaymentId // Only send email if this is a new payment
             ) {
-              try {
-                // Obtener índices de columnas relevantes para el email
-                const emailMemberIndex = headerRow.indexOf("emailMember");
-                const emailGuestIndex = headerRow.indexOf("emailGuest");
-                const nombreLocatarioPF1Index =
-                  headerRow.indexOf("nombreLocatarioPF1");
-                const nombreLocadorPF1Index =
-                  headerRow.indexOf("nombreLocadorPF1");
-                const denominacionLegalLocadorPJ1Index = headerRow.indexOf(
-                  "denominacionLegalLocadorPJ1"
-                );
-                const denominacionLegalLocatarioPJ1Index = headerRow.indexOf(
-                  "denominacionLegalLocatarioPJ1"
-                );
-
-                // Obtener valores de la fila actualizada (updatedRowValues)
-                const currentEmailMember =
-                  emailMemberIndex !== -1
-                    ? updatedRowValues[emailMemberIndex]
-                    : null;
-                const currentEmailGuest =
-                  emailGuestIndex !== -1
-                    ? updatedRowValues[emailGuestIndex]
-                    : null;
-                const nombreCliente =
-                  nombreLocatarioPF1Index !== -1
-                    ? updatedRowValues[nombreLocatarioPF1Index]
-                    : "Estimado/a usuario";
-
-                // Construir el asunto dinámicamente
-                let subject =
-                  "Tu Contrato de Locación de vivienda está listo - ";
-                let locadorInfo = "Locador Desconocido";
-                let locatarioInfo = "Locatario Desconocido";
-
-                if (nombreLocadorPF1Index !== -1) {
-                  locadorInfo = updatedRowValues[nombreLocadorPF1Index] || "";
-                }
-                if (denominacionLegalLocadorPJ1Index !== -1 && !locadorInfo) {
-                  locadorInfo =
-                    updatedRowValues[denominacionLegalLocadorPJ1Index] || "";
-                }
-
-                if (nombreLocatarioPF1Index !== -1) {
-                  locatarioInfo =
-                    updatedRowValues[nombreLocatarioPF1Index] || "";
-                }
-                if (
-                  denominacionLegalLocatarioPJ1Index !== -1 &&
-                  !locatarioInfo
-                ) {
-                  locatarioInfo =
-                    updatedRowValues[denominacionLegalLocatarioPJ1Index] || "";
-                }
-
-                subject += `${locadorInfo} - ${locatarioInfo}`;
-
-                const contractTypeDescription =
-                  "Contrato de Locación de vivienda";
-                const vercelApiUrl =
-                  "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase"; // Asegúrate de que esta URL sea correcta
-
-                const sendEmailToCustomEndpoint = async (toEmail) => {
-                  if (!toEmail) return; // No enviar si el email está vacío
-
-                  const payload = {
-                    to: toEmail,
-                    subject: subject,
-                    name: nombreCliente,
-                    linkPDF: pdfUrl, // Usar pdfUrl de la respuesta de Apps Script
-                    linkDOC: docUrl, // Usar docUrl de la respuesta de Apps Script
-                    contractTypeDescription: contractTypeDescription,
-                  };
-
-                  console.log(
-                    `Sending email to ${toEmail} via custom Vercel endpoint:`,
-                    payload
-                  );
-                  try {
-                    const response = await fetch(vercelApiUrl, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(payload),
-                    });
-                    const responseText = await response.text(); // Get text to log even if not JSON
-                    if (response.ok) {
-                      console.log(
-                        `Email sent to ${toEmail} via Vercel. Response: ${responseText}`
-                      );
-                    } else {
-                      console.error(
-                        `Error sending email to ${toEmail} via Vercel. Status: ${response.status}, Response: ${responseText}`
-                      );
-                    }
-                  } catch (error) {
-                    console.error(
-                      `Error sending email to ${toEmail} via Vercel:`,
-                      error
-                    );
-                  }
-                };
-
-                // Enviar email al miembro
-                await sendEmailToCustomEndpoint(currentEmailMember);
-                // Enviar email al invitado
-                await sendEmailToCustomEndpoint(currentEmailGuest);
-              } catch (error) {
-                console.error(
-                  "Error in Resend Email Integration (custom endpoint):",
-                  error
-                );
-              }
+              await sendEmailNotification(
+                emailMember,
+                emailGuest,
+                pdfUrl,
+                docUrl,
+                updatedRowValues,
+                headerRow
+              );
             } else {
               console.warn(
                 "Document URLs missing or payment already processed. Skipping email sending via custom endpoint."
@@ -602,43 +354,4 @@ export async function POST(req) {
       headers: responseHeaders,
     });
   }
-}
-
-// Helper function to convert column number to letter (e.g., 1 -> A, 27 -> AA)
-function getColumnLetter(columnNumber) {
-  let columnLetter = "";
-  let temp = columnNumber;
-  while (temp > 0) {
-    const remainder = (temp - 1) % 26;
-    columnLetter = String.fromCharCode(65 + remainder) + columnLetter;
-    temp = Math.floor((temp - 1) / 26);
-  }
-  return columnLetter;
-}
-
-// Helper function to map form data from Google Sheet to Webflow field slugs
-function mapFormDataToWebflowFields(formData) {
-  return {
-    editlink: formData["editlink"] || null, // Now dynamically pulling from formData
-    denominacionlegallocadorpj1:
-      formData["denominacionLegalLocadorPJ1"] || null,
-    nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
-    timestamp: formData["timestamp"] || null,
-    status: formData["status"] || null,
-    contrato: formData["Contrato"] || null,
-    memberstackid: formData["MemberstackID"] || null,
-    name: formData["contractID"] || "", // 'name' field is crucial for search/identification
-    slug: formData["contractID"] || "", // 'slug' should generally be unique
-    domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
-    ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
-    nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
-    denominacionlegallocatariopj1:
-      formData["denominacionLegalLocatarioPJ1"] || null,
-    hiddeninputlocacionfechainicio:
-      formData["hiddenInputLocacionFechaInicio"] || null,
-    hiddeninputlocacionfechatermino:
-      formData["hiddenInputLocacionFechaTermino"] || null,
-    pdffile: formData["pdffile"] || null, // These will be overridden by actual URLs from Apps Script
-    docfile: formData["docfile"] || null, // These will be overridden by actual URLs from Apps Script
-  };
 }
