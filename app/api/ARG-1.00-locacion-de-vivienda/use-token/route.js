@@ -1,4 +1,4 @@
-// app/api/use-token/route.js
+// app/api/ARG-1.00-locacion-de-vivienda/use-token/route.js
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import fetch from "node-fetch";
@@ -6,8 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import {
   interactWithWebflow,
   sendEmailNotification,
-} from "../../../utils/apiUtils"; // Importa las funciones reutilizables
-import { getColumnLetter } from "../../../utils/helpers"; // Importa la función helper
+} from "../../utils/apiUtils"; // Importa las funciones reutilizables
+import { getColumnLetter } from "../../utils/helpers"; // Importa la función helper
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -278,12 +278,24 @@ export async function POST(req) {
               );
             }
 
-            // --- MODIFICACIÃ“N: Resend Email Integration (con lÃ³gica de Apps Script) ---
+            // --- MODIFICACIÓN: Resend Email Integration (con lógica de Apps Script) ---
+            // Agregando logging para depurar el envío de email
+            console.log(`[Route] Checking conditions for email sending:`);
+            console.log(`[Route] pdfUrl: ${pdfUrl}`);
+            console.log(`[Route] docUrl: ${docUrl}`);
+            console.log(`[Route] existingPaymentId: ${existingPaymentId}`);
+            console.log(`[Route] emailMember (from request): ${emailMember}`);
+            console.log(`[Route] emailGuest (from request): ${emailGuest}`);
+
             if (
               pdfUrl && // Ensure PDF URL is available
               docUrl && // Ensure DOC URL is available
-              !existingPaymentId // Only send email if this is a new payment
+              !existingPaymentId && // Only send email if this is a new payment
+              (emailMember || emailGuest) // Ensure at least one email is present
             ) {
+              console.log(
+                `[Route] Conditions met. Calling sendEmailNotification.`
+              );
               await sendEmailNotification(
                 emailMember,
                 emailGuest,
@@ -294,7 +306,7 @@ export async function POST(req) {
               );
             } else {
               console.warn(
-                "Document URLs missing or payment already processed. Skipping email sending via custom endpoint."
+                "[Route] Document URLs missing, payment already processed, or no recipient emails found. Skipping email sending via custom endpoint."
               );
             }
           } else {
