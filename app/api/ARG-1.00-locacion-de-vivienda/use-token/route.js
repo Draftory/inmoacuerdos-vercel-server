@@ -124,7 +124,6 @@ export async function POST(req) {
     const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
     const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
     const docFileColumnIndex = headerRow.indexOf("DOCFile");
-    const webflowItemIdColumnIndex = headerRow.indexOf("WebflowItemID");
     const editlinkColumnIndex = headerRow.indexOf("Editlink"); // Modified to use "Editlink"
 
     // Validate essential columns
@@ -144,10 +143,6 @@ export async function POST(req) {
     // Warn for non-essential but useful columns
     if (pdfFileColumnIndex === -1) console.warn("PDFFile column not found.");
     if (docFileColumnIndex === -1) console.warn("DOCFile column not found.");
-    if (webflowItemIdColumnIndex === -1)
-      console.warn(
-        "WebflowItemID column not found in Google Sheet. Webflow updates might rely on 'name' field search."
-      );
     if (editlinkColumnIndex === -1)
       // Warn if editlink column is not found
       console.warn("Editlink column not found in Google Sheet."); // Updated warning message
@@ -271,7 +266,6 @@ export async function POST(req) {
                 pdfUrl,
                 docUrl,
                 rowDataToPass,
-                webflowItemIdColumnIndex,
                 sheets,
                 spreadsheetId,
                 sheetName,
