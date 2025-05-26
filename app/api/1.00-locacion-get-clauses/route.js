@@ -9,20 +9,14 @@ const allowedOrigins = [
 ];
 
 export async function GET(req) {
-  console.log("Starting API request to Airtable");
-
-  // Initialize headers with a default value
   let headers = {
-    "Access-Control-Allow-Origin": allowedOrigins[0], // Default to the first allowed origin
+    "Access-Control-Allow-Origin": allowedOrigins[0],
     "Access-Control-Allow-Methods": "GET",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   try {
-    // Retrieve the request origin
     const origin = req.headers.get("origin");
-
-    // Define CORS headers dynamically based on the request origin
     headers = {
       "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
         ? origin
@@ -31,12 +25,9 @@ export async function GET(req) {
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
 
-    // Retrieve Airtable credentials
-    const airtablePersonalAccessToken =
-      process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
+    const airtablePersonalAccessToken = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
     const airtableBaseId = process.env.AIRTABLE_BASE_ID_CLAUSES;
-    const airtableTableName =
-      process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
+    const airtableTableName = process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
 
     if (!airtablePersonalAccessToken) {
       logger.error('Token Airtable faltante');
@@ -47,10 +38,7 @@ export async function GET(req) {
       throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
     }
 
-    const base = new Airtable({ apiKey: airtablePersonalAccessToken }).base(
-      airtableBaseId
-    );
-    console.log("Airtable client initialized");
+    const base = new Airtable({ apiKey: airtablePersonalAccessToken }).base(airtableBaseId);
 
     return new Promise((resolve, reject) => {
       const records = [];
@@ -58,7 +46,6 @@ export async function GET(req) {
         .select()
         .eachPage(
           function page(partialRecords, fetchNextPage) {
-            console.log("Retrieved a page of records", partialRecords);
             records.push(...partialRecords);
             fetchNextPage();
           },
@@ -68,12 +55,8 @@ export async function GET(req) {
               resolve(NextResponse.error({ status: 500, headers }));
               return;
             }
-            console.log("Successfully fetched all records from Airtable");
-            const values = records.map((record) =>
-              Object.values(record.fields)
-            );
+            const values = records.map((record) => Object.values(record.fields));
             const airtableResponse = { values };
-            console.log("Formatted Airtable data:", airtableResponse);
             resolve(NextResponse.json(airtableResponse, { headers }));
           }
         );

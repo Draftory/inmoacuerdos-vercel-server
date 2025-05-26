@@ -34,9 +34,11 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
+  let contractID;
   try {
     const formObject = await req.json();
-    const { contractID, status, ...formData } = formObject;
+    contractID = formObject.contractID;
+    const { status, ...formData } = formObject;
 
     if (!formObject || typeof formObject !== "object" || Object.keys(formObject).length === 0) {
       logger.error('Datos inválidos', contractID);
@@ -73,22 +75,20 @@ export async function POST(req) {
     const headerSet = new Set(headerRow);
     const orderedValues = headerRow.map((header) => formObject[header] || "");
 
-    // Find the index of the 'Editlink' column
     const editLinkColumnIndex = headerRow.indexOf("Editlink");
     const valuesToWrite = [...orderedValues];
     if (editLinkColumnIndex !== -1) {
       valuesToWrite[editLinkColumnIndex] = editLink;
     } else {
-      console.warn("Warning: 'Editlink' column not found in the sheet header.");
-      valuesToWrite.push(editLink); // Append to the end
+      logger.warn('Columna Editlink no encontrada', contractID);
+      valuesToWrite.push(editLink);
     }
     const lastColumnLetter = getColumnLetter(valuesToWrite.length);
 
-    // --- Save to Google Sheets (including editLink) ---
     let rowIndex = -1;
     const allRowsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:VM`, // Adjust range as needed
+      range: `${sheetName}!A:VM`,
     });
     const allRows = allRowsResponse.data?.values || [];
     const contractIDColumnIndex = headerRow.indexOf("contractID");
@@ -107,7 +107,7 @@ export async function POST(req) {
             valueInputOption: "RAW",
             requestBody: { values: [valuesToWrite] },
           });
-          console.log("Row updated successfully (including editLink)");
+          logger.info('Fila actualizada', contractID);
           break;
         }
       }
@@ -118,22 +118,24 @@ export async function POST(req) {
           valueInputOption: "RAW",
           requestBody: { values: [valuesToWrite] },
         });
-        console.log("New row added successfully (including editLink)");
-        rowIndex = allRows.length + 1; // Approximate new row index
+        logger.info('Nueva fila agregada', contractID);
+        rowIndex = allRows.length + 1;
       }
     } else {
-      console.error(
-        "contractID or MemberstackID column not found, cannot update/append."
-      );
+      logger.error('Columnas requeridas no encontradas', contractID);
       return new NextResponse(
         JSON.stringify({ error: "Could not update/append row." }),
         { status: 500, headers: responseHeaders }
       );
     }
 
-    // --- Interact with Webflow API ---
     const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
     if (webflowApiToken && process.env.WEBFLOW_USER_COLLECTION_ID) {
+      const fieldData = mapFormDataToWebflowFields(formData);
+      fieldData.editlink = editLink;
+      fieldData.name = contractID;
+      fieldData.slug = contractID;
+
       const webflowResponse = await fetch(
         `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_USER_COLLECTION_ID}/items`,
         {
