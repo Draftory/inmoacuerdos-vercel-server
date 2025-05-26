@@ -19,6 +19,7 @@ import {
   generateDocuments,
   updateDocumentLinks,
 } from "../../../utils/mercadopagoUtils";
+import { logger } from '../../../utils/logger';
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -72,12 +73,12 @@ export async function POST(req) {
   };
 
   try {
-    console.log("[update-payment-status] Iniciando procesamiento de pago");
+    logger.info('Iniciando procesamiento de pago');
     const paymentData = await req.json();
     const { contractID } = paymentData;
 
     if (!contractID) {
-      console.error("[update-payment-status] Error: contractID faltante");
+      logger.error('contractID faltante');
       return createErrorResponse(
         "contractID es requerido en el cuerpo de la solicitud.",
         400,
@@ -97,7 +98,7 @@ export async function POST(req) {
     const contractIDColumnIndex = headerRow.indexOf("contractID");
 
     if (contractIDColumnIndex === -1) {
-      console.error("[update-payment-status] Error: Columna contractID no encontrada");
+      logger.error('Columna contractID no encontrada', contractID);
       return createErrorResponse(
         "Columna contractID no encontrada en la hoja de cálculo.",
         500,
@@ -115,9 +116,7 @@ export async function POST(req) {
     );
 
     if (rowIndex === -1) {
-      console.warn(
-        `[update-payment-status] No se encontró entrada para contractID: ${contractID}`
-      );
+      logger.warn('No se encontró entrada coincidente', contractID);
       return createErrorResponse(
         "No se encontró entrada coincidente en la hoja de cálculo.",
         404,
@@ -151,9 +150,7 @@ export async function POST(req) {
       updatedRowValues
     );
 
-    console.log(
-      `[update-payment-status] Hoja actualizada para contractID: ${contractID}`
-    );
+    logger.info('Hoja actualizada', contractID);
 
     // Verificar si es un pago nuevo y está aprobado
     const existingPaymentId = rowDataToPass[headerRow.indexOf("payment_id")];
@@ -220,14 +217,10 @@ export async function POST(req) {
         }
       }
     } else if (existingPaymentId) {
-      console.log(
-        `[update-payment-status] Pago existente encontrado para contractID: ${contractID}`
-      );
+      logger.info('Pago existente encontrado', contractID);
     }
 
-    console.log(
-      `[update-payment-status] Proceso completado para contractID: ${contractID}`
-    );
+    logger.info('Proceso completado', contractID);
     return createSuccessResponse(
       {
         message:
@@ -238,7 +231,7 @@ export async function POST(req) {
       responseHeaders
     );
   } catch (error) {
-    console.error("[update-payment-status] Error:", error);
+    logger.error(`Error en el procesamiento: ${error.message}`, contractID);
     return createErrorResponse(error.message, 500, responseHeaders);
   }
 }

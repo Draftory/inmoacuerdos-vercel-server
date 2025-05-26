@@ -17,6 +17,7 @@ import {
   createErrorResponse,
   createSuccessResponse,
 } from "../../../utils/responseUtils";
+import { logger } from '../../../utils/logger';
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -50,12 +51,10 @@ export async function POST(req) {
 
   try {
     const { contractID, memberstackID } = await req.json();
-    console.log(
-      `[use-token] Inicio del proceso para contractID: ${contractID}`
-    );
+    logger.info('Inicio del proceso', contractID);
 
     if (!contractID || !memberstackID) {
-      console.error(`[use-token] Error: contractID o memberstackID faltantes.`);
+      logger.error('contractID o memberstackID faltantes', contractID);
       return createErrorResponse(
         "contractID and memberstackID are required.",
         400,
@@ -69,7 +68,7 @@ export async function POST(req) {
     });
 
     if (!member) {
-      console.error(`[use-token] Error: Miembro no encontrado en Memberstack.`);
+      logger.error('Miembro no encontrado en Memberstack', contractID);
       return createErrorResponse(
         "Member not found in Memberstack.",
         404,
@@ -79,7 +78,7 @@ export async function POST(req) {
 
     const currentTokens = parseInt(member.metaData?.tokens || 0, 10);
     if (currentTokens <= 0) {
-      console.error(`[use-token] Error: Usuario sin tokens disponibles.`);
+      logger.error('Usuario sin tokens disponibles', contractID);
       return createErrorResponse(
         "No tokens available.",
         403,
@@ -106,9 +105,7 @@ export async function POST(req) {
     const editlinkColumnIndex = headerRow.indexOf("Editlink");
 
     if (contractIDColumnIndex === -1 || memberstackIDColumnIndex === -1) {
-      console.error(
-        `[use-token] Error: Columnas esenciales (contractID o MemberstackID) no encontradas en la hoja.`
-      );
+      logger.error('Columnas esenciales no encontradas en la hoja', contractID);
       return createErrorResponse(
         "Columnas esenciales no encontradas en la hoja de cálculo.",
         500,
@@ -125,9 +122,7 @@ export async function POST(req) {
     );
 
     if (rowIndex === -1) {
-      console.warn(
-        `[use-token] Advertencia: No se encontró entrada para contractID: ${contractID} y memberstackID: ${memberstackID}.`
-      );
+      logger.warn('No se encontró entrada coincidente', contractID);
       return createErrorResponse(
         "No se encontró entrada coincidente.",
         404,
@@ -155,18 +150,14 @@ export async function POST(req) {
       `A${rowIndex}:${lastColumnLetter}${rowIndex}`,
       updatedRowValues
     );
-    console.log(
-      `[use-token] Hoja de cálculo actualizada para contractID: ${contractID}`
-    );
+    logger.info('Hoja de cálculo actualizada', contractID);
 
     if (
       !existingPaymentId &&
       process.env.APPS_SCRIPT_GENERATE_DOC_URL &&
       process.env.VERCEL_API_SECRET
     ) {
-      console.log(
-        `[use-token] Solicitando generación de documentos para contractID: ${contractID}`
-      );
+      logger.info('Solicitando generación de documentos', contractID);
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
         spreadsheetId: spreadsheetId,
@@ -186,15 +177,10 @@ export async function POST(req) {
         );
         if (appsScriptResponse.ok) {
           const appsScriptResponseData = await appsScriptResponse.json();
-          console.log(
-            `[use-token] Respuesta completa de Apps Script:`,
-            JSON.stringify(appsScriptResponseData, null, 2)
-          );
+          logger.info('Documentos generados', contractID);
           const pdfUrl = appsScriptResponseData?.pdfUrl;
           const docUrl = appsScriptResponseData?.docUrl;
-          console.log(
-            `[use-token] Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`
-          );
+          logger.info(`Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`);
 
           // Decrement token after successful document generation
           const updatedTokens = currentTokens - 1;
@@ -216,9 +202,7 @@ export async function POST(req) {
                 planId: process.env.HAS_CREDITS_PLAN_ID,
               },
             });
-            console.log(
-              `[use-token] Usuario removido del plan Has Credits por falta de tokens.`
-            );
+            logger.info('Usuario removido del plan Has Credits', contractID);
           }
 
           const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
@@ -243,13 +227,9 @@ export async function POST(req) {
               rowIndex,
               editlinkColumnIndex
             );
-            console.log(
-              `[use-token] Webflow actualizado para contractID: ${contractID}. Resultado: ${webflowUpdateResult ? "Éxito" : "Advertencia"}`
-            );
+            logger.info('Webflow actualizado', contractID);
           } else {
-            console.warn(
-              `[use-token] Advertencia: No se actualizará Webflow para contractID: ${contractID}.`
-            );
+            logger.warn('No se actualizará Webflow', contractID);
           }
 
           let emailMember =
@@ -270,38 +250,28 @@ export async function POST(req) {
               updatedRowValues,
               headerRow
             );
-            console.log(
-              `[use-token] Notificación de correo electrónico enviada para contractID: ${contractID}. Éxito: ${emailSent}`
-            );
+            logger.info('Notificación de correo electrónico enviada', contractID);
           } else {
-            console.warn(
-              `[use-token] Advertencia: No se enviará notificación por correo electrónico para contractID: ${contractID}.`
-            );
+            logger.warn('No se enviará notificación por correo electrónico', contractID);
           }
         } else {
-          console.error(
+          logger.error(
             `[use-token] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
           );
         }
       } catch (error) {
-        console.error(
+        logger.error(
           `[use-token] Error al interactuar con Apps Script para contractID: ${contractID}:`,
           error
         );
       }
     } else if (existingPaymentId) {
-      console.log(
-        `[use-token] Pago existente encontrado para contractID: ${contractID}. Omitiendo generación y notificaciones.`
-      );
+      logger.info('Pago existente encontrado, omitiendo generación y notificaciones', contractID);
     } else {
-      console.warn(
-        `[use-token] Advertencia: No se generarán documentos para contractID: ${contractID}. Configuración faltante.`
-      );
+      logger.warn('No se generarán documentos, configuración faltante', contractID);
     }
 
-    console.log(
-      `[use-token] Proceso completado para contractID: ${contractID}`
-    );
+    logger.info('Proceso completado', contractID);
     return createSuccessResponse(
       {
         message:
@@ -313,10 +283,7 @@ export async function POST(req) {
       responseHeaders
     );
   } catch (error) {
-    console.error(
-      `[use-token] Error general para contractID: ${contractID}:`,
-      error
-    );
+    logger.error(`Error general: ${error.message}`, contractID);
     return createErrorResponse(error.message, 500, responseHeaders);
   }
 }

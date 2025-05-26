@@ -1,5 +1,6 @@
 // utils/googleSheetsUtils.js
 import { google } from "googleapis";
+import { logger } from './logger';
 
 export async function getGoogleSheetsClient(credentialsBase64) {
   try {
@@ -15,7 +16,7 @@ export async function getGoogleSheetsClient(credentialsBase64) {
     const client = await auth.getClient();
     return google.sheets({ version: "v4", auth: client });
   } catch (error) {
-    console.error("Error initializing Google Sheets client:", error);
+    logger.error(`Error inicializando cliente de Google Sheets: ${error.message}`);
     throw new Error("Failed to initialize Google Sheets client.");
   }
 }
@@ -28,7 +29,7 @@ export async function getSheetHeaderRow(sheets, spreadsheetId, sheetName) {
     });
     return headerResponse.data?.values?.[0] || [];
   } catch (error) {
-    console.error("Error getting header row:", error);
+    logger.error(`Error obteniendo fila de encabezados: ${error.message}`);
     throw new Error("Failed to get header row from Google Sheet.");
   }
 }
@@ -48,7 +49,7 @@ export async function updateSheetRow(
       requestBody: { values: [values] },
     });
   } catch (error) {
-    console.error(`Error updating row at range ${range}:`, error);
+    logger.error(`Error actualizando fila en rango ${range}: ${error.message}`);
     throw new Error(`Failed to update row in Google Sheet at range ${range}.`);
   }
 }
@@ -70,7 +71,7 @@ export async function findRowByColumns(
     const columnIndices = searchColumns.map((col) => headerRow.indexOf(col));
 
     if (columnIndices.some((index) => index === -1)) {
-      console.warn("Una o más columnas de búsqueda no encontradas.");
+      logger.warn('Una o más columnas de búsqueda no encontradas');
       return { rowIndex: -1, rowData: null };
     }
 
@@ -85,7 +86,7 @@ export async function findRowByColumns(
 
     return { rowIndex: -1, rowData: null };
   } catch (error) {
-    console.error("Error finding row by columns:", error);
+    logger.error(`Error buscando fila por columnas: ${error.message}`);
     throw new Error(
       "Failed to find row in Google Sheet by the specified criteria."
     );

@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import { v4 as uuidv4 } from "uuid";
 import { getColumnLetter } from "./helpers";
+import { logger } from './logger';
 
 /**
  * Procesa los datos de pago de Mercado Pago y actualiza la hoja de cálculo.
@@ -113,7 +114,7 @@ export async function generateDocuments(
   headerRow
 ) {
   if (!process.env.APPS_SCRIPT_GENERATE_DOC_URL || !process.env.VERCEL_API_SECRET) {
-    console.warn("APPS_SCRIPT_GENERATE_DOC_URL o VERCEL_API_SECRET no configurados");
+    logger.warn('APPS_SCRIPT_GENERATE_DOC_URL o VERCEL_API_SECRET no configurados');
     return null;
   }
 
@@ -140,11 +141,11 @@ export async function generateDocuments(
         docUrl: appsScriptResponseData?.docUrl,
       };
     } else {
-      console.error("Error al generar documentos:", await appsScriptResponse.text());
+      logger.error('Error al generar documentos', rowDataToPass[headerRow.indexOf('contractID')]);
       return null;
     }
   } catch (error) {
-    console.error("Error al interactuar con Apps Script:", error);
+    logger.error(`Error al interactuar con Apps Script: ${error.message}`, rowDataToPass[headerRow.indexOf('contractID')]);
     return null;
   }
 }
