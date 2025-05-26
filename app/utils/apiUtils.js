@@ -68,7 +68,7 @@ export async function interactWithWebflow(
 ) {
   if (!webflowApiToken || !webflowCollectionId || !pdfUrl || !docUrl) {
     logger.warn('Config Webflow incompleta', contractID);
-    return;
+    return { success: false, error: 'Incomplete Webflow configuration' };
   }
 
   const itemNameFieldSlug = "name";
@@ -91,48 +91,65 @@ export async function interactWithWebflow(
   );
   searchUrl.searchParams.set(itemNameFieldSlug, contractID);
 
-  const listItemsResponse = await fetch(searchUrl.toString(), {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${webflowApiToken}`,
-      "accept-version": "2.0.0",
-    },
-  });
+  try {
+    const listItemsResponse = await fetch(searchUrl.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${webflowApiToken}`,
+        "accept-version": "2.0.0",
+      },
+    });
 
-  const listItemsData = await listItemsResponse.json();
+    const listItemsData = await listItemsResponse.json();
 
-  if (listItemsData.items && listItemsData.items.length > 0) {
-    existingItem = listItemsData.items[0];
-    logger.debug('Item encontrado', contractID);
+    if (listItemsData.items && listItemsData.items.length > 0) {
+      existingItem = listItemsData.items[0];
+      logger.debug('Item encontrado', contractID);
+    }
+
+    const hasValidExistingItem = existingItem && existingItem.id;
+    const updateUrl = hasValidExistingItem
+      ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
+      : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
+
+    const method = hasValidExistingItem ? "PATCH" : "POST";
+    const requestBody = method === "POST" 
+      ? { fieldData: fieldData }
+      : { fieldData: fieldData, isArchived: false, isDraft: false };
+
+    const webflowResponse = await fetch(updateUrl, {
+      method: method,
+      headers: {
+        Authorization: `Bearer ${webflowApiToken}`,
+        "accept-version": "2.0.0",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const webflowResult = await webflowResponse.json();
+
+    if (!webflowResponse.ok) {
+      logger.error('Error API Webflow', contractID);
+      return { 
+        success: false, 
+        error: 'Webflow API error', 
+        details: webflowResult 
+      };
+    }
+
+    return { 
+      success: true, 
+      data: webflowResult 
+    };
+  } catch (error) {
+    logger.error(`Error en interacción con Webflow: ${error.message}`, contractID);
+    return { 
+      success: false, 
+      error: 'Webflow interaction error', 
+      details: error.message 
+    };
   }
-
-  const hasValidExistingItem = existingItem && existingItem.id;
-  const updateUrl = hasValidExistingItem
-    ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
-    : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
-
-  const method = hasValidExistingItem ? "PATCH" : "POST";
-  const requestBody = method === "POST" 
-    ? { fieldData: fieldData }
-    : { fieldData: fieldData, isArchived: false, isDraft: false };
-
-  const webflowResponse = await fetch(updateUrl, {
-    method: method,
-    headers: {
-      Authorization: `Bearer ${webflowApiToken}`,
-      "accept-version": "2.0.0",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  const webflowResult = await webflowResponse.json();
-
-  if (!webflowResponse.ok) {
-    logger.error('Error API Webflow', contractID);
-  }
-
-  return webflowResponse.ok;
 }
 
 /**

@@ -227,7 +227,15 @@ export async function POST(req) {
               rowIndex,
               editlinkColumnIndex
             );
-            logger.info('Webflow actualizado', contractID);
+            
+            if (webflowUpdateResult.success) {
+              logger.info('Webflow actualizado exitosamente', contractID);
+            } else {
+              logger.error(`Error actualizando Webflow: ${webflowUpdateResult.error}`, contractID);
+              if (webflowUpdateResult.details) {
+                logger.error(`Detalles del error: ${JSON.stringify(webflowUpdateResult.details)}`, contractID);
+              }
+            }
           } else {
             logger.warn('No se actualizará Webflow', contractID);
           }
