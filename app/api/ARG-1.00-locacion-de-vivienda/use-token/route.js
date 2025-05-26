@@ -186,6 +186,10 @@ export async function POST(req) {
         );
         if (appsScriptResponse.ok) {
           const appsScriptResponseData = await appsScriptResponse.json();
+          console.log(
+            `[use-token] Respuesta completa de Apps Script:`,
+            JSON.stringify(appsScriptResponseData, null, 2)
+          );
           const pdfUrl = appsScriptResponseData?.pdfUrl;
           const docUrl = appsScriptResponseData?.docUrl;
           console.log(
