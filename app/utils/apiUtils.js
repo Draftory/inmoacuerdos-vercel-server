@@ -66,7 +66,7 @@ export async function interactWithWebflow(
   rowIndex,
   editlinkColumnIndex
 ) {
-  if (!webflowApiToken || !webflowCollectionId || !pdfUrl || !docUrl) {
+  if (!webflowApiToken || !webflowCollectionId) {
     logger.warn('Config Webflow incompleta', contractID);
     return { success: false, error: 'Incomplete Webflow configuration' };
   }
@@ -78,8 +78,8 @@ export async function interactWithWebflow(
   });
 
   const fieldData = mapFormDataToWebflowFields(formData);
-  fieldData.pdffile = pdfUrl;
-  fieldData.docfile = docUrl;
+  if (pdfUrl) fieldData.pdffile = pdfUrl;
+  if (docUrl) fieldData.docfile = docUrl;
 
   if (editlinkColumnIndex !== -1 && rowDataToPass[editlinkColumnIndex]) {
     fieldData.editlink = rowDataToPass[editlinkColumnIndex];
@@ -130,6 +130,55 @@ export async function interactWithWebflow(
     const webflowResult = await webflowResponse.json();
 
     if (!webflowResponse.ok) {
+      // Si el error es porque el item está en queue, intentamos actualizarlo en draft
+      if (webflowResult.code === 'ITEM_IN_QUEUE' && hasValidExistingItem) {
+        const draftUpdateUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}`;
+        const draftResponse = await fetch(draftUpdateUrl, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${webflowApiToken}`,
+            "accept-version": "2.0.0",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        const draftResult = await draftResponse.json();
+        if (!draftResponse.ok) {
+          logger.error('Error API Webflow (draft)', contractID);
+          return { 
+            success: false, 
+            error: 'Webflow API error (draft)', 
+            details: draftResult 
+          };
+        }
+
+        // Publicar el item después de actualizarlo en draft
+        const publishUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/publish`;
+        const publishResponse = await fetch(publishUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${webflowApiToken}`,
+            "accept-version": "2.0.0",
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!publishResponse.ok) {
+          logger.error('Error publicando item en Webflow', contractID);
+          return { 
+            success: false, 
+            error: 'Webflow publish error', 
+            details: await publishResponse.json() 
+          };
+        }
+
+        return { 
+          success: true, 
+          data: draftResult 
+        };
+      }
+
       logger.error('Error API Webflow', contractID);
       return { 
         success: false, 

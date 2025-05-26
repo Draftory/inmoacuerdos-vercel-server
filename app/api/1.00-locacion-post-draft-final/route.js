@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import fetch from "node-fetch"; // Or your preferred HTTP library
 import { logger } from '../../utils/logger';
+import { interactWithWebflow } from '../../utils/apiUtils';
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -131,27 +132,29 @@ export async function POST(req) {
 
     const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
     if (webflowApiToken && process.env.WEBFLOW_USER_COLLECTION_ID) {
-      const fieldData = mapFormDataToWebflowFields(formData);
-      fieldData.editlink = editLink;
-      fieldData.name = contractID;
-      fieldData.slug = contractID;
-
-      const webflowResponse = await fetch(
-        `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_USER_COLLECTION_ID}/items`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${webflowApiToken}`,
-            "accept-version": "2.0.0",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ fieldData: fieldData }),
-        }
+      const webflowUpdateResult = await interactWithWebflow(
+        contractID,
+        webflowApiToken,
+        process.env.WEBFLOW_USER_COLLECTION_ID,
+        headerRow,
+        valuesToWrite,
+        formData.pdffile || null,
+        formData.docfile || null,
+        valuesToWrite,
+        sheets,
+        spreadsheetId,
+        sheetName,
+        rowIndex,
+        headerRow.indexOf("Editlink")
       );
 
-      const webflowResult = await webflowResponse.json();
-      if (!webflowResponse.ok) {
-        logger.error('Error Webflow', contractID);
+      if (webflowUpdateResult.success) {
+        logger.info('Webflow actualizado exitosamente', contractID);
+      } else {
+        logger.error(`Error actualizando Webflow: ${webflowUpdateResult.error}`, contractID);
+        if (webflowUpdateResult.details) {
+          logger.error(`Detalles del error: ${JSON.stringify(webflowUpdateResult.details)}`, contractID);
+        }
       }
     } else {
       logger.warn('Config Webflow faltante', contractID);
