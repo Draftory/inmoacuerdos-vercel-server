@@ -1,6 +1,7 @@
 // app/utils/apiUtils.js
 import fetch from "node-fetch";
 import { getColumnLetter } from "./helpers"; // Importa la función de helpers
+import { logger } from './logger';
 
 /**
  * Maps form data from Google Sheet to Webflow field slugs.
@@ -66,14 +67,11 @@ export async function interactWithWebflow(
   editlinkColumnIndex
 ) {
   if (!webflowApiToken || !webflowCollectionId || !pdfUrl || !docUrl) {
-    console.warn(
-      "Webflow API token, collection ID, or document URLs missing. Skipping Webflow update."
-    );
+    logger.warn('Configuración de Webflow incompleta', contractID);
     return;
   }
 
   const itemNameFieldSlug = "name";
-
   const formData = {};
   headerRow.forEach((header, index) => {
     formData[header] = updatedRowValues[index];
@@ -83,23 +81,16 @@ export async function interactWithWebflow(
   fieldData.pdffile = pdfUrl;
   fieldData.docfile = docUrl;
 
-  // Assign editlink directly from rowDataToPass (original data)
   if (editlinkColumnIndex !== -1 && rowDataToPass[editlinkColumnIndex]) {
     fieldData.editlink = rowDataToPass[editlinkColumnIndex];
   }
 
   let existingItem = null;
-
-  // Attempt to search by name (contractID)
-  console.log(
-    `Webflow item not found by ID from sheet (skipped), attempting to search by name: ${contractID}`
-  );
   const searchUrl = new URL(
     `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
   );
   searchUrl.searchParams.set(itemNameFieldSlug, contractID);
 
-  console.log("Webflow search URL:", searchUrl.toString());
   const listItemsResponse = await fetch(searchUrl.toString(), {
     method: "GET",
     headers: {
@@ -107,49 +98,25 @@ export async function interactWithWebflow(
       "accept-version": "2.0.0",
     },
   });
-  console.log("Webflow search response status:", listItemsResponse.status);
-  const listItemsData = await listItemsResponse.json();
-  console.log(
-    "Raw Webflow search by name response data:",
-    JSON.stringify(listItemsData, null, 2)
-  );
 
-  // IMPORTANT FIX: Only check the 'items' array for existing items
+  const listItemsData = await listItemsResponse.json();
+
   if (listItemsData.items && listItemsData.items.length > 0) {
     existingItem = listItemsData.items[0];
-    console.log(
-      "Found existing Webflow item via name search (from items array):",
-      existingItem.id
-    );
-  } else {
-    console.log("No existing Webflow item found with that name.");
+    logger.debug('Item de Webflow encontrado', contractID);
   }
 
   const hasValidExistingItem = existingItem && existingItem.id;
-
-  let webflowResponse;
-  let requestBody;
   const updateUrl = hasValidExistingItem
     ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
     : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
 
   const method = hasValidExistingItem ? "PATCH" : "POST";
+  const requestBody = method === "POST" 
+    ? { fieldData: fieldData }
+    : { fieldData: fieldData, isArchived: false, isDraft: false };
 
-  if (method === "POST") {
-    requestBody = {
-      fieldData: fieldData,
-    };
-  } else {
-    requestBody = {
-      fieldData: fieldData,
-      isArchived: false,
-      isDraft: false,
-    };
-  }
-
-  console.log(`Webflow ${method} Request Body:`, JSON.stringify(requestBody));
-
-  webflowResponse = await fetch(updateUrl, {
+  const webflowResponse = await fetch(updateUrl, {
     method: method,
     headers: {
       Authorization: `Bearer ${webflowApiToken}`,
@@ -160,21 +127,12 @@ export async function interactWithWebflow(
   });
 
   const webflowResult = await webflowResponse.json();
-  console.log("Webflow API Response:", webflowResult);
 
   if (!webflowResponse.ok) {
-    console.error("Error interacting with Webflow API:", webflowResult);
-  } else if (
-    method === "POST" &&
-    webflowResult.id
-    // No longer checking webflowItemIdColumnIndex !== -1 here
-  ) {
-    // This part will only execute if method is POST and webflowResult.id exists
-    // We are no longer updating WebflowItemID in Google Sheets from here
-    console.log(
-      "Webflow item created, but Google Sheets will not be updated with Webflow Item ID from this function."
-    );
+    logger.error('Error en la API de Webflow', contractID);
   }
+
+  return webflowResponse.ok;
 }
 
 /**
@@ -195,7 +153,7 @@ export async function sendEmailNotification(
   headerRow
 ) {
   if (!pdfUrl || !docUrl) {
-    console.warn("[Email] Document URLs missing. Skipping email sending.");
+    logger.warn('URLs de documentos faltantes');
     return;
   }
 
@@ -232,11 +190,11 @@ export async function sendEmailNotification(
   subject += `${locadorInfo} - ${locatarioInfo}`;
   const contractTypeDescription = "Contrato de Locación de vivienda";
   const vercelApiUrl =
-    "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase"; // Asegúrate de que esta URL sea correcta
+    "https://inmoacuerdos-vercel-server.vercel.app/api/Resend/email-one-time-purchase";
 
   const sendSingleEmail = async (toEmail) => {
     if (!toEmail) {
-      console.warn(`[Email] Skipping email to empty recipient.`);
+      logger.warn('Destinatario de email vacío');
       return;
     }
 
@@ -249,36 +207,27 @@ export async function sendEmailNotification(
       contractTypeDescription: contractTypeDescription,
     };
 
-    console.log(
-      `[Email] Sending email to ${toEmail} via custom Vercel endpoint:`,
-      JSON.stringify(payload, null, 2)
-    );
     try {
       const response = await fetch(vercelApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const responseText = await response.text();
+      
       if (response.ok) {
-        console.log(
-          `[Email] Email sent to ${toEmail} via Vercel. Response: ${responseText}`
-        );
+        logger.info('Email enviado exitosamente', toEmail);
       } else {
-        console.error(
-          `[Email] Error sending email to ${toEmail} via Vercel. Status: ${response.status}, Response: ${responseText}`
-        );
+        logger.error(`Error al enviar email: ${response.status}`, toEmail);
       }
     } catch (error) {
-      console.error(
-        `[Email] Error sending email to ${toEmail} via Vercel:`,
-        error
-      );
+      logger.error(`Error al enviar email: ${error.message}`, toEmail);
     }
   };
 
-  console.log(`[Email] Attempting to send email to Member: ${toEmailMember}`);
-  await sendSingleEmail(toEmailMember);
-  console.log(`[Email] Attempting to send email to Guest: ${toEmailGuest}`);
-  await sendSingleEmail(toEmailGuest);
+  if (toEmailMember) {
+    await sendSingleEmail(toEmailMember);
+  }
+  if (toEmailGuest) {
+    await sendSingleEmail(toEmailGuest);
+  }
 }

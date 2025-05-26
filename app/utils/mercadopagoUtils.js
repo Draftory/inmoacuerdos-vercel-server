@@ -179,6 +179,6 @@ export async function updateDocumentLinks(
       valueInputOption: "RAW",
       requestBody: { values: [[docUrl, pdfUrl]] },
     });
-    console.log("Hoja de cálculo actualizada con enlaces de documentos.");
+    logger.info('Enlaces de documentos actualizados', rowDataToPass[headerRow.indexOf('contractID')]);
   }
 } 

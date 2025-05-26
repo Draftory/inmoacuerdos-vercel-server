@@ -14,11 +14,33 @@ const LOG_PREFIXES = {
   [LOG_LEVELS.DEBUG]: '🔍'
 };
 
+// Función para truncar mensajes largos
+function truncateMessage(message, maxLength = 100) {
+  if (message.length <= maxLength) return message;
+  return message.substring(0, maxLength) + '...';
+}
+
+// Función para sanitizar datos sensibles
+function sanitizeData(data) {
+  if (typeof data === 'string') {
+    // Eliminar URLs completas
+    data = data.replace(/https?:\/\/[^\s]+/g, '[URL]');
+    // Eliminar emails
+    data = data.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL]');
+    // Eliminar tokens y IDs largos
+    data = data.replace(/[a-zA-Z0-9]{32,}/g, '[ID]');
+  }
+  return data;
+}
+
 function formatLogMessage(level, contractID, message) {
   const prefix = LOG_PREFIXES[level];
+  const sanitizedMessage = sanitizeData(message);
+  const truncatedMessage = truncateMessage(sanitizedMessage);
+  
   return contractID 
-    ? `${prefix} [${level}] [${contractID}] ${message}`
-    : `${prefix} [${level}] ${message}`;
+    ? `${prefix} [${contractID}] ${truncatedMessage}`
+    : `${prefix} ${truncatedMessage}`;
 }
 
 export const logger = {
