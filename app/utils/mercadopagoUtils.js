@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { v4 as uuidv4 } from "uuid";
+import { getColumnLetter } from "./helpers";
 
 /**
  * Procesa los datos de pago de Mercado Pago y actualiza la hoja de cálculo.
@@ -33,11 +34,32 @@ export async function processMercadoPagoPayment(
   } = paymentData;
 
   // Obtener índices de columnas
+  const contractIDColumnIndex = headerRow.indexOf("contractID");
   const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago");
   const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
   const paymentIdColumnIndex = headerRow.indexOf("payment_id");
   const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
   const statusColumnIndex = headerRow.indexOf("status");
+
+  // Validar columnas esenciales
+  if (contractIDColumnIndex === -1) {
+    throw new Error("contractID column not found in Google Sheet.");
+  }
+  if (tipoDePagoColumnIndex === -1) {
+    throw new Error("tipoDePago column not found in Google Sheet.");
+  }
+  if (estadoDePagoColumnIndex === -1) {
+    throw new Error("estadoDePago column not found in Google Sheet.");
+  }
+  if (paymentIdColumnIndex === -1) {
+    throw new Error("payment_id column not found in Google Sheet.");
+  }
+  if (fechaDePagoColumnIndex === -1) {
+    throw new Error("fechaDePago column not found in Google Sheet.");
+  }
+  if (statusColumnIndex === -1) {
+    throw new Error("status column not found in Google Sheet.");
+  }
 
   // Preparar datos de pago
   const paymentIdToUse = payment_id || uuidv4();

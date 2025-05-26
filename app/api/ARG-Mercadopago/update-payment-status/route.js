@@ -74,12 +74,12 @@ export async function POST(req) {
   try {
     console.log("[update-payment-status] Iniciando procesamiento de pago");
     const paymentData = await req.json();
-    const { contractID, memberstackID } = paymentData;
+    const { contractID } = paymentData;
 
     if (!contractID) {
       console.error("[update-payment-status] Error: contractID faltante");
       return createErrorResponse(
-        "contractID is required in the request body.",
+        "contractID es requerido en el cuerpo de la solicitud.",
         400,
         responseHeaders
       );
@@ -94,12 +94,24 @@ export async function POST(req) {
 
     // Obtener encabezados y encontrar la fila
     const headerRow = await getSheetHeaderRow(sheets, spreadsheetId, sheetName);
+    const contractIDColumnIndex = headerRow.indexOf("contractID");
+
+    if (contractIDColumnIndex === -1) {
+      console.error("[update-payment-status] Error: Columna contractID no encontrada");
+      return createErrorResponse(
+        "Columna contractID no encontrada en la hoja de cálculo.",
+        500,
+        responseHeaders
+      );
+    }
+
+    // Buscar la fila usando findRowByColumns solo por contractID
     const { rowIndex, rowData: rowDataToPass } = await findRowByColumns(
       sheets,
       spreadsheetId,
       sheetName,
-      ["contractID", "MemberstackID"],
-      [contractID, memberstackID]
+      ["contractID"],
+      [contractID]
     );
 
     if (rowIndex === -1) {
@@ -107,7 +119,7 @@ export async function POST(req) {
         `[update-payment-status] No se encontró entrada para contractID: ${contractID}`
       );
       return createErrorResponse(
-        "Matching contractID not found in the spreadsheet.",
+        "No se encontró entrada coincidente en la hoja de cálculo.",
         404,
         responseHeaders
       );
