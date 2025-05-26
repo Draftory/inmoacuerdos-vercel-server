@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
+import { logger } from '../../utils/logger';
 
 const allowedOrigins = [
     'https://www.inmoacuerdos.com',
@@ -21,7 +22,6 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-    console.log("Starting API request to Google Sheets for draft data");
     const origin = req.headers.get('origin');
     const headers = {
         'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
@@ -32,9 +32,10 @@ export async function POST(req) {
     try {
         const requestBody = await req.json();
         const contractID = requestBody.contractID;
-        const memberstackID = requestBody.memberstackID; // Get MemberstackID from request
+        const memberstackID = requestBody.memberstackID;
 
         if (!contractID || !memberstackID) {
+            logger.error('Datos requeridos faltantes', contractID);
             return new NextResponse(JSON.stringify({ error: 'contractID and memberstackID are required' }), {
                 status: 400,
                 headers: headers,
@@ -43,12 +44,12 @@ export async function POST(req) {
 
         const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
         if (!googleCredentialsBase64) {
+            logger.error('Credenciales faltantes', contractID);
             throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
         }
+
         const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
         const credentials = JSON.parse(googleCredentialsJson);
-
-        console.log("GOOGLE_APPLICATION_CREDENTIALS_SECRET decoded and ready for use");
 
         const auth = new google.auth.GoogleAuth({
             credentials,
@@ -63,46 +64,54 @@ export async function POST(req) {
         });
 
         const values = response.data.values;
-        if (!values || values.length <= 1) {
-            return new NextResponse(JSON.stringify({ error: 'No data found in the spreadsheet' }), {
+        if (!values || values.length === 0) {
+            logger.error('Datos no encontrados', contractID);
+            return new NextResponse(JSON.stringify({ error: 'No data found in spreadsheet' }), {
                 status: 404,
                 headers: headers,
             });
         }
 
-        const headersRow = values[0];
-        const contractIDIndex = headersRow.indexOf('contractID');
-        const memberstackIDIndex = headersRow.indexOf('MemberstackID'); // Get MemberstackID column index
+        const headerRow = values[0];
+        const contractIDIndex = headerRow.indexOf('contractID');
+        const memberstackIDIndex = headerRow.indexOf('MemberstackID');
 
-        if (contractIDIndex === -1) {
-            return new NextResponse(JSON.stringify({ error: 'contractID column not found' }), {
-                status: 400,
-                headers: headers,
-            });
-        }
-        if (memberstackIDIndex === -1){
-            return new NextResponse(JSON.stringify({error: 'MemberstackID column not found'}),{
-                status: 400,
+        if (contractIDIndex === -1 || memberstackIDIndex === -1) {
+            logger.error('Columnas no encontradas', contractID);
+            return new NextResponse(JSON.stringify({ error: 'Required columns not found' }), {
+                status: 500,
                 headers: headers,
             });
         }
 
-        for (let i = 1; i < values.length; i++) {
-            if (values[i][contractIDIndex] === contractID && values[i][memberstackIDIndex] === memberstackID) {
-                const draftData = {};
-                for (let j = 0; j < headersRow.length; j++) {
-                    draftData[headersRow[j]] = values[i][j];
-                }
-                return NextResponse.json(draftData, { headers });
-            }
+        const row = values.find(row => 
+            row[contractIDIndex] === contractID && 
+            row[memberstackIDIndex] === memberstackID
+        );
+
+        if (!row) {
+            logger.error('Fila no encontrada', contractID);
+            return new NextResponse(JSON.stringify({ error: 'Row not found' }), {
+                status: 404,
+                headers: headers,
+            });
         }
 
-        return new NextResponse(JSON.stringify({ error: 'Draft not found or unauthorized' }), {
-            status: 404,
+        const formData = {};
+        headerRow.forEach((header, index) => {
+            formData[header] = row[index] || '';
+        });
+
+        logger.info('Datos recuperados', contractID);
+        return new NextResponse(JSON.stringify(formData), {
+            status: 200,
             headers: headers,
         });
     } catch (error) {
-        console.error("POST Error:", error);
-        return NextResponse.error({ status: 500, headers });
+        logger.error(`Error: ${error.message}`, contractID);
+        return new NextResponse(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: headers,
+        });
     }
 }

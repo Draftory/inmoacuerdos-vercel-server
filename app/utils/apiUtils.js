@@ -67,7 +67,7 @@ export async function interactWithWebflow(
   editlinkColumnIndex
 ) {
   if (!webflowApiToken || !webflowCollectionId || !pdfUrl || !docUrl) {
-    logger.warn('Configuración de Webflow incompleta', contractID);
+    logger.warn('Config Webflow incompleta', contractID);
     return;
   }
 
@@ -103,7 +103,7 @@ export async function interactWithWebflow(
 
   if (listItemsData.items && listItemsData.items.length > 0) {
     existingItem = listItemsData.items[0];
-    logger.debug('Item de Webflow encontrado', contractID);
+    logger.debug('Item encontrado', contractID);
   }
 
   const hasValidExistingItem = existingItem && existingItem.id;
@@ -129,7 +129,7 @@ export async function interactWithWebflow(
   const webflowResult = await webflowResponse.json();
 
   if (!webflowResponse.ok) {
-    logger.error('Error en la API de Webflow', contractID);
+    logger.error('Error API Webflow', contractID);
   }
 
   return webflowResponse.ok;
@@ -153,7 +153,7 @@ export async function sendEmailNotification(
   headerRow
 ) {
   if (!pdfUrl || !docUrl) {
-    logger.warn('URLs de documentos faltantes');
+    logger.warn('URLs faltantes');
     return;
   }
 
@@ -194,7 +194,7 @@ export async function sendEmailNotification(
 
   const sendSingleEmail = async (toEmail) => {
     if (!toEmail) {
-      logger.warn('Destinatario de email vacío');
+      logger.warn('Email vacío');
       return;
     }
 
@@ -215,12 +215,12 @@ export async function sendEmailNotification(
       });
       
       if (response.ok) {
-        logger.info('Email enviado exitosamente', toEmail);
+        logger.info('Email enviado', toEmail);
       } else {
-        logger.error(`Error al enviar email: ${response.status}`, toEmail);
+        logger.error(`Error email: ${response.status}`, toEmail);
       }
     } catch (error) {
-      logger.error(`Error al enviar email: ${error.message}`, toEmail);
+      logger.error(`Error email: ${error.message}`, toEmail);
     }
   };
 

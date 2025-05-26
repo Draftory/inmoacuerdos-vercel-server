@@ -15,7 +15,7 @@ const LOG_PREFIXES = {
 };
 
 // Función para truncar mensajes largos
-function truncateMessage(message, maxLength = 100) {
+function truncateMessage(message, maxLength = 50) {
   if (message.length <= maxLength) return message;
   return message.substring(0, maxLength) + '...';
 }

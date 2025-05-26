@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
 import fetch from "node-fetch"; // Or your preferred HTTP library
+import { logger } from '../../utils/logger';
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -24,10 +25,8 @@ export async function OPTIONS(req) {
 }
 
 export async function POST(req) {
-  console.log("Starting API request to handle contract data");
   const origin = req.headers.get("origin");
   const responseHeaders = {
-    // Create headers object for the response
     "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
       ? origin
       : allowedOrigins[0],
@@ -37,32 +36,22 @@ export async function POST(req) {
 
   try {
     const formObject = await req.json();
-    console.log("Received formObject (Server-Side):", formObject);
     const { contractID, status, ...formData } = formObject;
-    console.log("Extracted formData:", formData);
 
-    if (
-      !formObject ||
-      typeof formObject !== "object" ||
-      Object.keys(formObject).length === 0
-    ) {
+    if (!formObject || typeof formObject !== "object" || Object.keys(formObject).length === 0) {
+      logger.error('Datos inválidos', contractID);
       throw new Error("Invalid or missing data in the request body.");
     }
 
-    // --- 1. Generate Edit Link ---
     const editLink = `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`;
 
-    const googleCredentialsBase64 =
-      process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-
+    const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
     if (!googleCredentialsBase64) {
+      logger.error('Credenciales faltantes', contractID);
       throw new Error("GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set");
     }
 
-    const googleCredentialsJson = Buffer.from(
-      googleCredentialsBase64,
-      "base64"
-    ).toString("utf-8");
+    const googleCredentialsJson = Buffer.from(googleCredentialsBase64, "base64").toString("utf-8");
     const credentials = JSON.parse(googleCredentialsJson);
 
     const auth = new google.auth.GoogleAuth({
@@ -143,83 +132,36 @@ export async function POST(req) {
     }
 
     // --- Interact with Webflow API ---
-    const webflowApiToken = process.env.WEBFLOW_API_TOKEN; // Using the correct environment variable
-    if (webflowApiToken) {
-      const webflowCollectionId = process.env.WEBFLOW_USER_COLLECTION_ID; // Using the correct environment variable
-      const itemNameFieldSlug = "name";
-
-      const fetchUrl = new URL(
-        `https://api.webflow.com/v2/collections/${webflowCollectionId}/items`
+    const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
+    if (webflowApiToken && process.env.WEBFLOW_USER_COLLECTION_ID) {
+      const webflowResponse = await fetch(
+        `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_USER_COLLECTION_ID}/items`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${webflowApiToken}`,
+            "accept-version": "2.0.0",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ fieldData: fieldData }),
+        }
       );
-      fetchUrl.searchParams.set(itemNameFieldSlug, contractID);
-
-      const listItemsResponse = await fetch(fetchUrl.toString(), {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${webflowApiToken}`,
-          "accept-version": "2.0.0",
-        },
-      });
-      const listItemsData = await listItemsResponse.json();
-      const existingItem = listItemsData.items?.[0];
-
-      const fieldData = mapFormDataToWebflowFields(formData);
-      fieldData.editlink = editLink; // Ensure 'editlink' is set
-      fieldData.name = contractID; // Ensure 'name' is set correctly
-      fieldData.slug = contractID; // Ensure 'slug' is set correctly
-
-      let webflowResponse;
-      let requestBody;
-      const updateUrl = existingItem
-        ? `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/${existingItem.id}/live`
-        : `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/live`;
-
-      const method = existingItem ? "PATCH" : "POST";
-
-      if (method === "POST") {
-        requestBody = {
-          fieldData: fieldData,
-        };
-      } else {
-        requestBody = {
-          fieldData: fieldData,
-          isArchived: false,
-          isDraft: false,
-        };
-      }
-
-      console.log(
-        `Webflow ${method} Request Body:`,
-        JSON.stringify(requestBody)
-      );
-
-      webflowResponse = await fetch(updateUrl, {
-        method: method,
-        headers: {
-          Authorization: `Bearer ${webflowApiToken}`,
-          "accept-version": "2.0.0",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
 
       const webflowResult = await webflowResponse.json();
-      console.log("Webflow API Response:", webflowResult);
-
       if (!webflowResponse.ok) {
-        console.error("Error interacting with Webflow API:", webflowResult);
-        // Consider how to handle Webflow API errors
+        logger.error('Error Webflow', contractID);
       }
     } else {
-      console.warn("WEBFLOW_API_TOKEN not configured.");
+      logger.warn('Config Webflow faltante', contractID);
     }
 
+    logger.info('Proceso completado', contractID);
     return new NextResponse(
       JSON.stringify({ message: "Contract data processed successfully." }),
       { status: 200, headers: responseHeaders }
     );
   } catch (error) {
-    console.error("Error in Vercel POST:", error);
+    logger.error(`Error: ${error.message}`, contractID);
     return new NextResponse(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: responseHeaders,

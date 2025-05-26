@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Airtable from "airtable";
+import { logger } from '../../utils/logger';
 
 // List of allowed origins
 const allowedOrigins = [
@@ -38,9 +39,11 @@ export async function GET(req) {
       process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
 
     if (!airtablePersonalAccessToken) {
+      logger.error('Token Airtable faltante');
       throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
     }
     if (!airtableBaseId) {
+      logger.error('Base ID Airtable faltante');
       throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
     }
 
@@ -52,9 +55,7 @@ export async function GET(req) {
     return new Promise((resolve, reject) => {
       const records = [];
       base(airtableTableName)
-        .select({
-          // Add your select options here if needed
-        })
+        .select()
         .eachPage(
           function page(partialRecords, fetchNextPage) {
             console.log("Retrieved a page of records", partialRecords);
@@ -63,7 +64,7 @@ export async function GET(req) {
           },
           function done(err) {
             if (err) {
-              console.error("Error fetching records from Airtable:", err);
+              logger.error(`Error Airtable: ${err.message}`);
               resolve(NextResponse.error({ status: 500, headers }));
               return;
             }
@@ -78,7 +79,7 @@ export async function GET(req) {
         );
     });
   } catch (error) {
-    console.error("Error processing Airtable request:", error);
+    logger.error(`Error: ${error.message}`);
     return NextResponse.error({ status: 500, headers });
   }
 }

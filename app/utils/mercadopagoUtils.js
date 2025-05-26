@@ -114,7 +114,7 @@ export async function generateDocuments(
   headerRow
 ) {
   if (!process.env.APPS_SCRIPT_GENERATE_DOC_URL || !process.env.VERCEL_API_SECRET) {
-    logger.warn('APPS_SCRIPT_GENERATE_DOC_URL o VERCEL_API_SECRET no configurados');
+    logger.warn('Config Apps Script faltante');
     return null;
   }
 
@@ -141,11 +141,11 @@ export async function generateDocuments(
         docUrl: appsScriptResponseData?.docUrl,
       };
     } else {
-      logger.error('Error al generar documentos', rowDataToPass[headerRow.indexOf('contractID')]);
+      logger.error('Error generación docs', rowDataToPass[headerRow.indexOf('contractID')]);
       return null;
     }
   } catch (error) {
-    logger.error(`Error al interactuar con Apps Script: ${error.message}`, rowDataToPass[headerRow.indexOf('contractID')]);
+    logger.error(`Error Apps Script: ${error.message}`, rowDataToPass[headerRow.indexOf('contractID')]);
     return null;
   }
 }
@@ -179,6 +179,6 @@ export async function updateDocumentLinks(
       valueInputOption: "RAW",
       requestBody: { values: [[docUrl, pdfUrl]] },
     });
-    logger.info('Enlaces de documentos actualizados', rowDataToPass[headerRow.indexOf('contractID')]);
+    logger.info('Docs actualizados', rowDataToPass[headerRow.indexOf('contractID')]);
   }
 } 
