@@ -1,6 +1,7 @@
 // app/api/ARG-1.00-locacion-de-vivienda/use-token/route.js
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
+import memberstackAdmin from "@memberstack/admin";
 import {
   interactWithWebflow,
   sendEmailNotification,
@@ -21,6 +22,9 @@ const allowedOrigins = [
   "https://www.inmoacuerdos.com",
   "https://inmoacuerdos.webflow.io",
 ];
+
+// Initialize Memberstack
+const memberstack = memberstackAdmin.init(process.env.MEMBERSTACK_SECRET_KEY);
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -55,6 +59,30 @@ export async function POST(req) {
       return createErrorResponse(
         "contractID and memberstackID are required.",
         400,
+        responseHeaders
+      );
+    }
+
+    // Check if user has tokens available
+    const { data: member } = await memberstack.members.retrieve({
+      id: memberstackID,
+    });
+
+    if (!member) {
+      console.error(`[use-token] Error: Miembro no encontrado en Memberstack.`);
+      return createErrorResponse(
+        "Member not found in Memberstack.",
+        404,
+        responseHeaders
+      );
+    }
+
+    const currentTokens = parseInt(member.metaData?.tokens || 0, 10);
+    if (currentTokens <= 0) {
+      console.error(`[use-token] Error: Usuario sin tokens disponibles.`);
+      return createErrorResponse(
+        "No tokens available.",
+        403,
         responseHeaders
       );
     }
@@ -163,6 +191,31 @@ export async function POST(req) {
           console.log(
             `[use-token] Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`
           );
+
+          // Decrement token after successful document generation
+          const updatedTokens = currentTokens - 1;
+          await memberstack.members.update({
+            id: memberstackID,
+            data: {
+              metaData: {
+                ...member.metaData,
+                tokens: updatedTokens,
+              },
+            },
+          });
+
+          // If user has no tokens left, remove from Has Credits plan
+          if (updatedTokens === 0 && process.env.HAS_CREDITS_PLAN_ID) {
+            await memberstack.members.removeFreePlan({
+              id: memberstackID,
+              data: {
+                planId: process.env.HAS_CREDITS_PLAN_ID,
+              },
+            });
+            console.log(
+              `[use-token] Usuario removido del plan Has Credits por falta de tokens.`
+            );
+          }
 
           const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
           if (
