@@ -54,7 +54,8 @@ export async function POST(req) {
       console.error(`[use-token] Error: contractID o memberstackID faltantes.`);
       return createErrorResponse(
         "contractID and memberstackID are required.",
-        400
+        400,
+        responseHeaders
       );
     }
 
@@ -82,7 +83,8 @@ export async function POST(req) {
       );
       return createErrorResponse(
         "Columnas esenciales no encontradas en la hoja de cálculo.",
-        500
+        500,
+        responseHeaders
       );
     }
 
@@ -98,7 +100,11 @@ export async function POST(req) {
       console.warn(
         `[use-token] Advertencia: No se encontró entrada para contractID: ${contractID} y memberstackID: ${memberstackID}.`
       );
-      return createErrorResponse("No se encontró entrada coincidente.", 404);
+      return createErrorResponse(
+        "No se encontró entrada coincidente.",
+        404,
+        responseHeaders
+      );
     }
 
     const updatedRowValues = [...rowDataToPass];
@@ -173,7 +179,7 @@ export async function POST(req) {
               updatedRowValues,
               pdfUrl,
               docUrl,
-              rowDataToPass, // ¡rowDataToPass ahora está definido aquí!
+              rowDataToPass,
               sheets,
               spreadsheetId,
               sheetName,
@@ -239,17 +245,21 @@ export async function POST(req) {
     console.log(
       `[use-token] Proceso completado para contractID: ${contractID}`
     );
-    return createSuccessResponse({
-      message:
-        "Payment details updated successfully, follow-up initiated (if applicable).",
-      paymentId: paymentId,
-      fechaDePago: nowArgentina,
-    });
+    return createSuccessResponse(
+      {
+        message:
+          "Payment details updated successfully, follow-up initiated (if applicable).",
+        paymentId: paymentId,
+        fechaDePago: nowArgentina,
+      },
+      200,
+      responseHeaders
+    );
   } catch (error) {
     console.error(
       `[use-token] Error general para contractID: ${contractID}:`,
       error
     );
-    return createErrorResponse(error.message);
+    return createErrorResponse(error.message, 500, responseHeaders);
   }
 }
