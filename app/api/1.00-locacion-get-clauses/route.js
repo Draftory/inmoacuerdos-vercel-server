@@ -39,8 +39,25 @@ export async function GET(req) {
       throw error;
     }
 
+    // Log para ver la estructura de los datos
+    logger.info('Primera cláusula recibida:', JSON.stringify(clauses[0]));
+
     // Transformar los datos al formato esperado por el frontend
-    const values = clauses.map(clause => [clause.Clausula]);
+    const values = clauses.map(clause => {
+      // Log para ver cada cláusula individual
+      logger.info('Procesando cláusula:', JSON.stringify(clause));
+      
+      return [
+        clause.Placeholder || '', // Nombre del placeholder
+        clause["Value (inputValue)"] || '', // Valor/definición de la cláusula
+        clause.Clause || '' // Contenido de la cláusula
+      ];
+    });
+
+    // Log para ver el resultado final
+    logger.info(`Cláusulas obtenidas: ${values.length}`);
+    logger.info('Primera cláusula transformada:', JSON.stringify(values[0]));
+
     return NextResponse.json({ values }, { headers });
   } catch (error) {
     logger.error(`Error: ${error.message}`);
