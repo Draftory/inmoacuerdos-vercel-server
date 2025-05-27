@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { logger } from '../../utils/logger';
 
@@ -42,54 +42,28 @@ export async function POST(req) {
             });
         }
 
-        const googleCredentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET;
-        if (!googleCredentialsBase64) {
-            logger.error('Credenciales faltantes', contractID);
-            throw new Error('GOOGLE_APPLICATION_CREDENTIALS_SECRET is not set');
-        }
+        const supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_ANON_KEY
+        );
 
-        const googleCredentialsJson = Buffer.from(googleCredentialsBase64, 'base64').toString('utf-8');
-        const credentials = JSON.parse(googleCredentialsJson);
+        // Buscar en Supabase
+        const { data, error } = await supabase
+            .from('1.00 - Contrato de Locación de Vivienda - Database')
+            .select('*')
+            .eq('contractID', contractID)
+            .eq('MemberstackID', memberstackID)
+            .single();
 
-        const auth = new google.auth.GoogleAuth({
-            credentials,
-            scopes: 'https://www.googleapis.com/auth/spreadsheets.readonly',
-        });
-        const client = await auth.getClient();
-        const sheets = google.sheets({ version: 'v4', auth: client });
-
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: process.env.LOCACION_POST_DATABASE_SHEET_ID,
-            range: process.env.LOCACION_POST_DATABASE_SHEET_NAME,
-        });
-
-        const values = response.data.values;
-        if (!values || values.length === 0) {
-            logger.error('Datos no encontrados', contractID);
-            return new NextResponse(JSON.stringify({ error: 'No data found in spreadsheet' }), {
-                status: 404,
-                headers: headers,
-            });
-        }
-
-        const headerRow = values[0];
-        const contractIDIndex = headerRow.indexOf('contractID');
-        const memberstackIDIndex = headerRow.indexOf('MemberstackID');
-
-        if (contractIDIndex === -1 || memberstackIDIndex === -1) {
-            logger.error('Columnas no encontradas', contractID);
-            return new NextResponse(JSON.stringify({ error: 'Required columns not found' }), {
+        if (error) {
+            logger.error(`Error Supabase: ${error.message}`, contractID);
+            return new NextResponse(JSON.stringify({ error: 'Error querying database' }), {
                 status: 500,
                 headers: headers,
             });
         }
 
-        const row = values.find(row => 
-            row[contractIDIndex] === contractID && 
-            row[memberstackIDIndex] === memberstackID
-        );
-
-        if (!row) {
+        if (!data) {
             logger.error('Fila no encontrada', contractID);
             return new NextResponse(JSON.stringify({ error: 'Row not found' }), {
                 status: 404,
@@ -97,13 +71,8 @@ export async function POST(req) {
             });
         }
 
-        const formData = {};
-        headerRow.forEach((header, index) => {
-            formData[header] = row[index] || '';
-        });
-
         logger.info('Datos recuperados', contractID);
-        return new NextResponse(JSON.stringify(formData), {
+        return new NextResponse(JSON.stringify(data), {
             status: 200,
             headers: headers,
         });
