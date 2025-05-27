@@ -66,13 +66,7 @@ export async function POST(req) {
       timestamp: new Date().toISOString(),
       MemberstackID: formData.MemberstackID || null,
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`,
-      Contrato: "1.00 - Contrato de Locación de Vivienda",
-      // Asegurarnos de que los campos requeridos tengan valores por defecto
-      Libre_2: formData.Libre_2 || "",
-      Libre_3: formData.Libre_3 || "",
-      Libre_4: formData.Libre_4 || "",
-      Libre: formData.Libre || "",
-      Libre_1: formData.Libre_1 || ""
+      Contrato: "1.00 - Contrato de Locación de Vivienda"
     };
 
     // Limpiar valores undefined o null
@@ -108,47 +102,43 @@ export async function POST(req) {
           error: tableError,
           message: tableError.message
         }, null, 2));
-      } else {
-        const existingColumns = Object.keys(tableInfo[0] || {});
-        logger.info('Estructura actual de la tabla:', JSON.stringify({
-          existingColumns,
-          attemptedColumns: Object.keys(supabaseData)
-        }, null, 2));
+        throw tableError;
       }
 
-      // Ahora intentamos la inserción
+      // Obtenemos las columnas existentes en la tabla
+      const existingColumns = Object.keys(tableInfo[0] || {});
+      logger.info('Columnas existentes en la tabla:', JSON.stringify(existingColumns, null, 2));
+
+      // Filtramos los datos para incluir solo las columnas que existen en la tabla
+      const filteredData = Object.keys(supabaseData).reduce((acc, key) => {
+        if (existingColumns.includes(key)) {
+          acc[key] = supabaseData[key];
+        }
+        return acc;
+      }, {});
+
+      logger.info('Datos filtrados para Supabase:', JSON.stringify(filteredData, null, 2));
+
+      // Ahora intentamos la inserción con los datos filtrados
       const { data, error } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
-        .insert([supabaseData])
+        .insert([filteredData])
         .select();
 
       if (error) {
-        const existingColumns = tableInfo ? Object.keys(tableInfo[0] || {}) : [];
-        const attemptedColumns = Object.keys(supabaseData);
-        const missingColumns = attemptedColumns.filter(col => !existingColumns.includes(col));
-
         logger.error('Error Supabase:', JSON.stringify({
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code,
-          data: supabaseData,
+          data: filteredData,
           errorObject: error
-        }, null, 2));
-
-        logger.error('Columnas faltantes:', JSON.stringify({
-          missingColumns,
-          existingColumns,
-          attemptedColumns
         }, null, 2));
 
         return NextResponse.json(
           { 
             error: "Error saving to database", 
-            details: error.message,
-            missingColumns,
-            existingColumns,
-            attemptedColumns
+            details: error.message
           },
           { status: 500, headers }
         );
