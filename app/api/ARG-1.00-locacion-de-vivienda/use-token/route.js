@@ -124,55 +124,104 @@ export async function POST(req) {
 
     // Generar documentos si es necesario
     if (!contract.payment_id && process.env.APPS_SCRIPT_GENERATE_DOC_URL && contract.status === 'Contrato') {
+      logger.info('Solicitando generación de documentos', contractID);
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
         contractData: contract,
         paymentId: paymentId
       };
 
-      const appsScriptResponse = await fetch(
-        process.env.APPS_SCRIPT_GENERATE_DOC_URL,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(dataToSendToAppsScript),
-        }
-      );
+      try {
+        const appsScriptResponse = await fetch(
+          process.env.APPS_SCRIPT_GENERATE_DOC_URL,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(dataToSendToAppsScript),
+          }
+        );
 
-      if (appsScriptResponse.ok) {
-        const appsScriptResponseData = await appsScriptResponse.json();
-        const pdfUrl = appsScriptResponseData?.pdfUrl;
-        const docUrl = appsScriptResponseData?.docUrl;
+        if (appsScriptResponse.ok) {
+          const appsScriptResponseData = await appsScriptResponse.json();
+          logger.info('Documentos generados', contractID);
+          const pdfUrl = appsScriptResponseData?.pdfUrl;
+          const docUrl = appsScriptResponseData?.docUrl;
+          logger.info(`Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`);
 
-        // Actualizar URLs de documentos en Supabase
-        await supabase
-          .from('1.00 - Contrato de Locación de Vivienda - Database')
-          .update({
-            PDFFile: pdfUrl,
-            DOCFile: docUrl
-          })
-          .eq('contractID', contractID)
-          .eq('MemberstackID', memberstackID);
+          if (pdfUrl && docUrl) {
+            // Actualizar URLs de documentos en Supabase
+            await supabase
+              .from('1.00 - Contrato de Locación de Vivienda - Database')
+              .update({
+                PDFFile: pdfUrl,
+                DOCFile: docUrl
+              })
+              .eq('contractID', contractID)
+              .eq('MemberstackID', memberstackID);
 
-        // Actualizar Webflow
-        if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_USER_COLLECTION_ID) {
-          await interactWithWebflow(
-            contractID,
-            process.env.WEBFLOW_API_TOKEN,
-            process.env.WEBFLOW_USER_COLLECTION_ID,
-            Object.keys(contract),
-            Object.values(contract),
-            pdfUrl,
-            docUrl,
-            Object.values(contract),
-            null,
-            null,
-            null,
-            null,
-            Object.keys(contract).indexOf("Editlink")
+            // Actualizar Webflow
+            if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_USER_COLLECTION_ID) {
+              const webflowUpdateResult = await interactWithWebflow(
+                contractID,
+                process.env.WEBFLOW_API_TOKEN,
+                process.env.WEBFLOW_USER_COLLECTION_ID,
+                Object.keys(contract),
+                Object.values(contract),
+                pdfUrl,
+                docUrl,
+                Object.values(contract),
+                null,
+                null,
+                null,
+                null,
+                Object.keys(contract).indexOf("Editlink")
+              );
+              
+              if (webflowUpdateResult.success) {
+                logger.info('Webflow actualizado exitosamente', contractID);
+              } else {
+                logger.error(`Error actualizando Webflow: ${webflowUpdateResult.error}`, contractID);
+                if (webflowUpdateResult.details) {
+                  logger.error(`Detalles del error: ${JSON.stringify(webflowUpdateResult.details)}`, contractID);
+                }
+              }
+            }
+
+            // Enviar notificación por correo si hay emails
+            let emailMember = contract.emailMember;
+            let emailGuest = contract.emailGuest;
+
+            if (emailMember || emailGuest) {
+              const emailSent = await sendEmailNotification(
+                emailMember,
+                emailGuest,
+                pdfUrl,
+                docUrl,
+                Object.values(contract),
+                Object.keys(contract)
+              );
+              logger.info('Notificación de correo electrónico enviada', contractID);
+            } else {
+              logger.warn('No se enviará notificación por correo electrónico', contractID);
+            }
+          } else {
+            logger.error('No se recibieron URLs de documentos de AppScript', contractID);
+          }
+        } else {
+          logger.error(
+            `[use-token] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
           );
         }
+      } catch (error) {
+        logger.error(
+          `[use-token] Error al interactuar con Apps Script para contractID: ${contractID}:`,
+          error
+        );
       }
+    } else if (contract.payment_id) {
+      logger.info('Pago existente encontrado, omitiendo generación y notificaciones', contractID);
+    } else {
+      logger.warn('No se generarán documentos, configuración faltante', contractID);
     }
 
     // Actualizar tokens en Memberstack
@@ -196,29 +245,6 @@ export async function POST(req) {
         },
       });
       logger.info('Usuario removido del plan Has Credits', contractID);
-    }
-
-    let emailMember =
-      contract.emailMember
-        ? contract.emailMember
-        : undefined;
-    let emailGuest =
-      contract.emailGuest
-        ? contract.emailGuest
-        : undefined;
-
-    if (pdfUrl && docUrl && (emailMember || emailGuest)) {
-      const emailSent = await sendEmailNotification(
-        emailMember,
-        emailGuest,
-        pdfUrl,
-        docUrl,
-        Object.values(contract),
-        Object.keys(contract)
-      );
-      logger.info('Notificación de correo electrónico enviada', contractID);
-    } else {
-      logger.warn('No se enviará notificación por correo electrónico', contractID);
     }
 
     logger.info('Proceso completado', contractID);
