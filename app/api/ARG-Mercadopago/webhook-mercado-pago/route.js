@@ -1,6 +1,12 @@
 import { logger } from '../../../utils/logger';
 import { NextResponse } from "next/server";
 import { MercadoPagoConfig, Payment } from "mercadopago";
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 export async function POST(request) {
   try {
@@ -53,44 +59,31 @@ export async function POST(request) {
 
         logger.info('Datos extraídos del pago', contractId);
 
-        // Construir el objeto para actualizar Google Sheets
-        const updateData = {
-          contractID: contractId,
-          payment_id: dataId,
-          estadoDePago:
-            paymentStatus === "approved" ? "Pagado" : paymentStatus,
-          fechaDePago: paymentDate
-            ? new Date(paymentDate).toISOString()
-            : null,
-          memberstackID: memberstackId,
-          tipoDePago: tipoDePago,
-        };
+        // Actualizar contrato en Supabase
+        const { error: updateError } = await supabase
+          .from('1.00 - Contrato de Locación de Vivienda - Database')
+          .update({
+            tipoDePago: tipoDePago || 'Mercado Pago',
+            estadoDePago: paymentStatus === "approved" ? "Pagado" : paymentStatus,
+            payment_id: dataId,
+            fechaDePago: paymentDate ? new Date(paymentDate).toISOString() : null,
+            status: 'Contrato'
+          })
+          .eq('contractID', contractId)
+          .eq('MemberstackID', memberstackId);
 
-        logger.info('Enviando datos a Google Sheets', contractId);
-
-        // URL de tu función de Vercel para Google Sheets
-        const googleSheetsApiUrl =
-          "https://inmoacuerdos-vercel-server.vercel.app/api/ARG-Mercadopago/update-payment-status";
-
-        const response = await fetch(googleSheetsApiUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updateData),
-        });
-
-        if (!response.ok) {
-          logger.error(`Error al actualizar estado del pago: ${response.statusText}`, contractId);
+        if (updateError) {
+          logger.error(`Error al actualizar estado del pago en Supabase: ${updateError.message}`, contractId);
           return new Response(
             JSON.stringify({
-              error: "Failed to update payment status in Google Sheets.",
+              error: "Failed to update payment status in Supabase.",
+              details: updateError.message
             }),
             { status: 500 }
           );
         }
 
-        logger.info('Estado del pago actualizado exitosamente', contractId);
+        logger.info('Estado del pago actualizado exitosamente en Supabase', contractId);
         return new Response(
           JSON.stringify({ message: "Payment status updated successfully." }),
           { status: 200 }
