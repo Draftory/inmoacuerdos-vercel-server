@@ -62,7 +62,6 @@ export async function POST(req) {
       ...formData,
       // Luego sobrescribimos o aseguramos los campos específicos
       contractID,
-      status: "Borrador",
       timestamp: new Date().toISOString(),
       MemberstackID: formData.MemberstackID || null,
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`,

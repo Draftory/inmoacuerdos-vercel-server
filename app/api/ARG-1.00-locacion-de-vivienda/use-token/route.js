@@ -112,7 +112,8 @@ export async function POST(req) {
         tipoDePago: 'Token',
         estadoDePago: 'Pagado',
         payment_id: paymentId,
-        fechaDePago: nowArgentina
+        fechaDePago: nowArgentina,
+        status: 'Contrato'
       })
       .eq('contractID', contractID)
       .eq('MemberstackID', memberstackID);
@@ -122,7 +123,7 @@ export async function POST(req) {
     }
 
     // Generar documentos si es necesario
-    if (!contract.payment_id && process.env.APPS_SCRIPT_GENERATE_DOC_URL) {
+    if (!contract.payment_id && process.env.APPS_SCRIPT_GENERATE_DOC_URL && contract.status === 'Contrato') {
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
         contractData: contract,
