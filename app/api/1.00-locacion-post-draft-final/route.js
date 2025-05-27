@@ -59,8 +59,8 @@ export async function POST(req) {
     // Preparar los datos para Supabase - solo campos básicos
     const supabaseData = {
       contractID,
-      Status: "Borrador",
-      Timestamp: new Date().toISOString(),
+      status: "Borrador",
+      timestamp: new Date().toISOString(),
       MemberstackID: formData.MemberstackID || null,
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`,
       Contrato: "1.00 - Contrato de Locación de Vivienda"
