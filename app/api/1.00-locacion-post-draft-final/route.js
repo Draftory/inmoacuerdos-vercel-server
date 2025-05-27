@@ -82,6 +82,13 @@ export async function POST(req) {
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
     };
 
+    // Limpiar valores undefined o null
+    Object.keys(supabaseData).forEach(key => {
+      if (supabaseData[key] === undefined) {
+        supabaseData[key] = null;
+      }
+    });
+
     logger.info('Datos preparados para Supabase:', JSON.stringify(supabaseData, null, 2));
 
     // Si hay URLs de PDF o DOC, las agregamos
@@ -96,81 +103,95 @@ export async function POST(req) {
 
     // Insertar en Supabase
     logger.info('Intentando insertar en Supabase');
-    const { data, error } = await supabase
-      .from('1.00 - Contrato de Locación de Vivienda - Database')
-      .insert([supabaseData])
-      .select();
+    try {
+      const { data, error } = await supabase
+        .from('1.00 - Contrato de Locación de Vivienda - Database')
+        .insert([supabaseData])
+        .select();
 
-    if (error) {
-      logger.error('Error Supabase:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return NextResponse.json(
-        { error: "Error saving to database" },
-        { status: 500, headers }
-      );
-    }
-
-    logger.info('Datos insertados exitosamente en Supabase:', JSON.stringify(data, null, 2));
-
-    // Solo interactuamos con Webflow si hay URLs de documentos
-    if (formData.PDFFile && formData.DOCFile) {
-      logger.info('Iniciando interacción con Webflow');
-      const webflowResult = await interactWithWebflow(
-        contractID,
-        process.env.WEBFLOW_API_TOKEN,
-        process.env.WEBFLOW_COLLECTION_ID,
-        Object.keys(formData),
-        Object.values(formData),
-        formData.PDFFile,
-        formData.DOCFile,
-        Object.values(formData),
-        null,
-        null,
-        null,
-        null,
-        -1
-      );
-
-      if (!webflowResult.success) {
-        logger.error('Error Webflow:', webflowResult.error);
+      if (error) {
+        logger.error('Error Supabase:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          data: supabaseData
+        });
         return NextResponse.json(
-          { error: "Error updating Webflow" },
+          { error: "Error saving to database", details: error.message },
           { status: 500, headers }
         );
       }
-      logger.info('Webflow actualizado exitosamente');
-    } else {
-      logger.info('Omitiendo interacción con Webflow - no hay URLs de documentos');
-    }
 
-    // Solo enviamos emails si hay URLs de documentos
-    if (formData.PDFFile && formData.DOCFile) {
-      logger.info('Iniciando envío de emails');
-      await sendEmailNotification(
-        formData.emailMember || null,
-        formData.emailGuest || null,
-        formData.PDFFile,
-        formData.DOCFile,
-        Object.values(formData),
-        Object.keys(formData)
+      logger.info('Datos insertados exitosamente en Supabase:', JSON.stringify(data, null, 2));
+
+      // Solo interactuamos con Webflow si hay URLs de documentos
+      if (formData.PDFFile && formData.DOCFile) {
+        logger.info('Iniciando interacción con Webflow');
+        const webflowResult = await interactWithWebflow(
+          contractID,
+          process.env.WEBFLOW_API_TOKEN,
+          process.env.WEBFLOW_COLLECTION_ID,
+          Object.keys(formData),
+          Object.values(formData),
+          formData.PDFFile,
+          formData.DOCFile,
+          Object.values(formData),
+          null,
+          null,
+          null,
+          null,
+          -1
+        );
+
+        if (!webflowResult.success) {
+          logger.error('Error Webflow:', webflowResult.error);
+          return NextResponse.json(
+            { error: "Error updating Webflow" },
+            { status: 500, headers }
+          );
+        }
+        logger.info('Webflow actualizado exitosamente');
+      } else {
+        logger.info('Omitiendo interacción con Webflow - no hay URLs de documentos');
+      }
+
+      // Solo enviamos emails si hay URLs de documentos
+      if (formData.PDFFile && formData.DOCFile) {
+        logger.info('Iniciando envío de emails');
+        await sendEmailNotification(
+          formData.emailMember || null,
+          formData.emailGuest || null,
+          formData.PDFFile,
+          formData.DOCFile,
+          Object.values(formData),
+          Object.keys(formData)
+        );
+        logger.info('Emails enviados exitosamente');
+      } else {
+        logger.info('Omitiendo envío de emails - no hay URLs de documentos');
+      }
+
+      logger.info('Proceso completado exitosamente');
+      return NextResponse.json(
+        { 
+          success: true, 
+          data: data[0]
+        },
+        { headers }
       );
-      logger.info('Emails enviados exitosamente');
-    } else {
-      logger.info('Omitiendo envío de emails - no hay URLs de documentos');
+    } catch (supabaseError) {
+      logger.error('Error al interactuar con Supabase:', {
+        error: supabaseError,
+        message: supabaseError.message,
+        stack: supabaseError.stack,
+        data: supabaseData
+      });
+      return NextResponse.json(
+        { error: "Error saving to database", details: supabaseError.message },
+        { status: 500, headers }
+      );
     }
-
-    logger.info('Proceso completado exitosamente');
-    return NextResponse.json(
-      { 
-        success: true, 
-        data: data[0]
-      },
-      { headers }
-    );
 
   } catch (error) {
     logger.error('Error en el proceso:', {
@@ -179,7 +200,7 @@ export async function POST(req) {
       body: error.body
     });
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: error.message },
       { status: 500, headers }
     );
   }
