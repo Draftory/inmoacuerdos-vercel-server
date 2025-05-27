@@ -56,19 +56,28 @@ export async function POST(req) {
       );
     }
 
-    // Preparar los datos para Supabase - solo campos básicos
+    // Preparar los datos para Supabase - incluir todos los campos del formulario
     const supabaseData = {
+      // Primero incluimos todos los campos del formulario
+      ...formData,
+      // Luego sobrescribimos o aseguramos los campos específicos
       contractID,
       status: "Borrador",
       timestamp: new Date().toISOString(),
       MemberstackID: formData.MemberstackID || null,
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`,
-      Contrato: "1.00 - Contrato de Locación de Vivienda"
+      Contrato: "1.00 - Contrato de Locación de Vivienda",
+      // Asegurarnos de que los campos requeridos tengan valores por defecto
+      Libre_2: formData.Libre_2 || "",
+      Libre_3: formData.Libre_3 || "",
+      Libre_4: formData.Libre_4 || "",
+      Libre: formData.Libre || "",
+      Libre_1: formData.Libre_1 || ""
     };
 
     // Limpiar valores undefined o null
     Object.keys(supabaseData).forEach(key => {
-      if (supabaseData[key] === undefined) {
+      if (supabaseData[key] === undefined || supabaseData[key] === "") {
         supabaseData[key] = null;
       }
     });
