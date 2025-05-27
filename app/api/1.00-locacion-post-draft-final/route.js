@@ -95,15 +95,16 @@ export async function POST(req) {
         .limit(1);
 
       if (tableError) {
-        logger.error('Error al obtener estructura de la tabla:', {
+        logger.error('Error al obtener estructura de la tabla:', JSON.stringify({
           error: tableError,
           message: tableError.message
-        });
+        }, null, 2));
       } else {
-        logger.info('Estructura actual de la tabla:', {
-          existingColumns: Object.keys(tableInfo[0] || {}),
+        const existingColumns = Object.keys(tableInfo[0] || {});
+        logger.info('Estructura actual de la tabla:', JSON.stringify({
+          existingColumns,
           attemptedColumns: Object.keys(supabaseData)
-        });
+        }, null, 2));
       }
 
       // Ahora intentamos la inserción
@@ -113,25 +114,24 @@ export async function POST(req) {
         .select();
 
       if (error) {
-        logger.error('Error Supabase:', {
+        const existingColumns = tableInfo ? Object.keys(tableInfo[0] || {}) : [];
+        const attemptedColumns = Object.keys(supabaseData);
+        const missingColumns = attemptedColumns.filter(col => !existingColumns.includes(col));
+
+        logger.error('Error Supabase:', JSON.stringify({
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code,
           data: supabaseData,
-          errorObject: JSON.stringify(error, null, 2)
-        });
+          errorObject: error
+        }, null, 2));
 
-        // Comparar columnas
-        const existingColumns = tableInfo ? Object.keys(tableInfo[0] || {}) : [];
-        const attemptedColumns = Object.keys(supabaseData);
-        const missingColumns = attemptedColumns.filter(col => !existingColumns.includes(col));
-
-        logger.error('Columnas faltantes:', {
+        logger.error('Columnas faltantes:', JSON.stringify({
           missingColumns,
           existingColumns,
           attemptedColumns
-        });
+        }, null, 2));
 
         return NextResponse.json(
           { 
