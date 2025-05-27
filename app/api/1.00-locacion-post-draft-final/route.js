@@ -56,30 +56,14 @@ export async function POST(req) {
       );
     }
 
-    // Preparar los datos para Supabase
+    // Preparar los datos para Supabase - solo campos básicos
     const supabaseData = {
       contractID,
       Status: "Borrador",
       Timestamp: new Date().toISOString(),
       MemberstackID: formData.MemberstackID || null,
-      nombreLocadorPF1: formData.nombreLocadorPF1 || null,
-      nombreLocadorPF2: formData.nombreLocadorPF2 || null,
-      nombreLocadorPF3: formData.nombreLocadorPF3 || null,
-      denominacionLegalLocadorPJ1: formData.denominacionLegalLocadorPJ1 || null,
-      denominacionLegalLocadorPJ2: formData.denominacionLegalLocadorPJ2 || null,
-      denominacionLegalLocadorPJ3: formData.denominacionLegalLocadorPJ3 || null,
-      nombreLocatarioPF1: formData.nombreLocatarioPF1 || null,
-      nombreLocatarioPF2: formData.nombreLocatarioPF2 || null,
-      nombreLocatarioPF3: formData.nombreLocatarioPF3 || null,
-      denominacionLegalLocatarioPJ1: formData.denominacionLegalLocatarioPJ1 || null,
-      denominacionLegalLocatarioPJ2: formData.denominacionLegalLocatarioPJ2 || null,
-      denominacionLegalLocatarioPJ3: formData.denominacionLegalLocatarioPJ3 || null,
-      domicilioInmuebleLocado: formData.domicilioInmuebleLocado || null,
-      ciudadInmuebleLocado: formData.ciudadInmuebleLocado || null,
-      hiddenInputLocacionFechaInicio: formData.hiddenInputLocacionFechaInicio || null,
-      hiddenInputLocacionFechaTermino: formData.hiddenInputLocacionFechaTermino || null,
-      Contrato: formData.Contrato || null,
-      Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
+      Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`,
+      Contrato: "1.00 - Contrato de Locación de Vivienda"
     };
 
     // Limpiar valores undefined o null
@@ -115,10 +99,30 @@ export async function POST(req) {
           details: error.details,
           hint: error.hint,
           code: error.code,
-          data: supabaseData
+          data: supabaseData,
+          errorObject: JSON.stringify(error, null, 2)
         });
+
+        // Intentar obtener la estructura de la tabla
+        const { data: tableInfo, error: tableError } = await supabase
+          .from('1.00 - Contrato de Locación de Vivienda - Database')
+          .select('*')
+          .limit(1);
+
+        if (!tableError) {
+          logger.info('Estructura actual de la tabla:', {
+            columns: Object.keys(tableInfo[0] || {}),
+            attemptedColumns: Object.keys(supabaseData)
+          });
+        }
+
         return NextResponse.json(
-          { error: "Error saving to database", details: error.message },
+          { 
+            error: "Error saving to database", 
+            details: error.message,
+            attemptedColumns: Object.keys(supabaseData),
+            existingColumns: tableInfo ? Object.keys(tableInfo[0] || {}) : []
+          },
           { status: 500, headers }
         );
       }
