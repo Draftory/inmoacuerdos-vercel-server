@@ -112,8 +112,7 @@ export async function POST(req) {
         tipoDePago: 'Token',
         estadoDePago: 'Pagado',
         payment_id: paymentId,
-        fechaDePago: nowArgentina,
-        updated_at: new Date().toISOString()
+        fechaDePago: nowArgentina
       })
       .eq('contractID', contractID)
       .eq('MemberstackID', memberstackID);
