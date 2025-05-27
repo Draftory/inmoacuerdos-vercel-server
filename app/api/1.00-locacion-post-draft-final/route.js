@@ -124,7 +124,7 @@ export async function POST(req) {
       const webflowResult = await interactWithWebflow(
         contractID,
         process.env.WEBFLOW_API_TOKEN,
-        process.env.WEBFLOW_COLLECTION_ID,
+        process.env.WEBFLOW_USER_COLLECTION_ID,
         Object.keys(formData),
         Object.values(formData),
         formData.PDFFile || null,
