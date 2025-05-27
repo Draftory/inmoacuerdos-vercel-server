@@ -31,12 +31,13 @@ export async function POST(req) {
     );
 
     const body = await req.json();
-    const { contractID, pdfUrl, docUrl, formData } = body;
+    const { contractID, formData } = body;
 
-    if (!contractID || !pdfUrl || !docUrl || !formData) {
+    // Solo validamos que exista el contractID y formData
+    if (!contractID || !formData) {
       logger.error('Datos incompletos en la solicitud');
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields: contractID and formData" },
         { status: 400, headers }
       );
     }
@@ -44,30 +45,32 @@ export async function POST(req) {
     // Preparar los datos para Supabase
     const supabaseData = {
       contractID,
-      PDFFile: pdfUrl,
-      DOCFile: docUrl,
-      Status: "Final",
+      Status: "Borrador",
       Timestamp: new Date().toISOString(),
-      MemberstackID: formData.MemberstackID,
-      nombreLocadorPF1: formData.nombreLocadorPF1,
-      nombreLocadorPF2: formData.nombreLocadorPF2,
-      nombreLocadorPF3: formData.nombreLocadorPF3,
-      denominacionLegalLocadorPJ1: formData.denominacionLegalLocadorPJ1,
-      denominacionLegalLocadorPJ2: formData.denominacionLegalLocadorPJ2,
-      denominacionLegalLocadorPJ3: formData.denominacionLegalLocadorPJ3,
-      nombreLocatarioPF1: formData.nombreLocatarioPF1,
-      nombreLocatarioPF2: formData.nombreLocatarioPF2,
-      nombreLocatarioPF3: formData.nombreLocatarioPF3,
-      denominacionLegalLocatarioPJ1: formData.denominacionLegalLocatarioPJ1,
-      denominacionLegalLocatarioPJ2: formData.denominacionLegalLocatarioPJ2,
-      denominacionLegalLocatarioPJ3: formData.denominacionLegalLocatarioPJ3,
-      domicilioInmuebleLocado: formData.domicilioInmuebleLocado,
-      ciudadInmuebleLocado: formData.ciudadInmuebleLocado,
-      hiddenInputLocacionFechaInicio: formData.hiddenInputLocacionFechaInicio,
-      hiddenInputLocacionFechaTermino: formData.hiddenInputLocacionFechaTermino,
-      Contrato: formData.Contrato,
+      MemberstackID: formData.MemberstackID || null,
+      nombreLocadorPF1: formData.nombreLocadorPF1 || null,
+      nombreLocadorPF2: formData.nombreLocadorPF2 || null,
+      nombreLocadorPF3: formData.nombreLocadorPF3 || null,
+      denominacionLegalLocadorPJ1: formData.denominacionLegalLocadorPJ1 || null,
+      denominacionLegalLocadorPJ2: formData.denominacionLegalLocadorPJ2 || null,
+      denominacionLegalLocadorPJ3: formData.denominacionLegalLocadorPJ3 || null,
+      nombreLocatarioPF1: formData.nombreLocatarioPF1 || null,
+      nombreLocatarioPF2: formData.nombreLocatarioPF2 || null,
+      nombreLocatarioPF3: formData.nombreLocatarioPF3 || null,
+      denominacionLegalLocatarioPJ1: formData.denominacionLegalLocatarioPJ1 || null,
+      denominacionLegalLocatarioPJ2: formData.denominacionLegalLocatarioPJ2 || null,
+      denominacionLegalLocatarioPJ3: formData.denominacionLegalLocatarioPJ3 || null,
+      domicilioInmuebleLocado: formData.domicilioInmuebleLocado || null,
+      ciudadInmuebleLocado: formData.ciudadInmuebleLocado || null,
+      hiddenInputLocacionFechaInicio: formData.hiddenInputLocacionFechaInicio || null,
+      hiddenInputLocacionFechaTermino: formData.hiddenInputLocacionFechaTermino || null,
+      Contrato: formData.Contrato || null,
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
     };
+
+    // Si hay URLs de PDF o DOC, las agregamos
+    if (body.pdfUrl) supabaseData.PDFFile = body.pdfUrl;
+    if (body.docUrl) supabaseData.DOCFile = body.docUrl;
 
     // Insertar en Supabase
     const { data, error } = await supabase
@@ -83,46 +86,49 @@ export async function POST(req) {
       );
     }
 
-    // Interactuar con Webflow
-    const webflowResult = await interactWithWebflow(
-      contractID,
-      process.env.WEBFLOW_API_TOKEN,
-      process.env.WEBFLOW_COLLECTION_ID,
-      Object.keys(formData),
-      Object.values(formData),
-      pdfUrl,
-      docUrl,
-      Object.values(formData),
-      null, // sheets ya no es necesario
-      null, // spreadsheetId ya no es necesario
-      null, // sheetName ya no es necesario
-      null, // rowIndex ya no es necesario
-      -1 // editlinkColumnIndex ya no es necesario
-    );
-
-    if (!webflowResult.success) {
-      logger.error(`Error Webflow: ${webflowResult.error}`);
-      return NextResponse.json(
-        { error: "Error updating Webflow" },
-        { status: 500, headers }
+    // Solo interactuamos con Webflow si hay URLs de documentos
+    if (body.pdfUrl && body.docUrl) {
+      const webflowResult = await interactWithWebflow(
+        contractID,
+        process.env.WEBFLOW_API_TOKEN,
+        process.env.WEBFLOW_COLLECTION_ID,
+        Object.keys(formData),
+        Object.values(formData),
+        body.pdfUrl,
+        body.docUrl,
+        Object.values(formData),
+        null,
+        null,
+        null,
+        null,
+        -1
       );
+
+      if (!webflowResult.success) {
+        logger.error(`Error Webflow: ${webflowResult.error}`);
+        return NextResponse.json(
+          { error: "Error updating Webflow" },
+          { status: 500, headers }
+        );
+      }
     }
 
-    // Enviar notificaciones por email
-    await sendEmailNotification(
-      formData.memberEmail || null,
-      formData.guestEmail || null,
-      pdfUrl,
-      docUrl,
-      Object.values(formData),
-      Object.keys(formData)
-    );
+    // Solo enviamos emails si hay URLs de documentos
+    if (body.pdfUrl && body.docUrl) {
+      await sendEmailNotification(
+        formData.memberEmail || null,
+        formData.guestEmail || null,
+        body.pdfUrl,
+        body.docUrl,
+        Object.values(formData),
+        Object.keys(formData)
+      );
+    }
 
     return NextResponse.json(
       { 
         success: true, 
-        data: data[0],
-        webflow: webflowResult.data 
+        data: data[0]
       },
       { headers }
     );
