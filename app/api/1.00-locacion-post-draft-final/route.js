@@ -64,8 +64,7 @@ export async function POST(req) {
       contractID,
       timestamp: new Date().toISOString(),
       MemberstackID: formData.MemberstackID || null,
-      Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`,
-      Contrato: "1.00 - Contrato de Locación de Vivienda"
+      Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
     };
 
     // Limpiar valores undefined o null
