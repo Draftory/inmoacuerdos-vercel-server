@@ -16,7 +16,11 @@ export async function POST(req) {
   };
 
   try {
+    logger.info('Iniciando POST request');
+    
     const origin = req.headers.get("origin");
+    logger.info(`Origin: ${origin}`);
+    
     headers = {
       "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
         ? origin
@@ -30,12 +34,20 @@ export async function POST(req) {
       process.env.SUPABASE_ANON_KEY
     );
 
+    logger.info('Intentando parsear el body');
     const body = await req.json();
+    logger.info('Body recibido:', JSON.stringify(body, null, 2));
+
     const { contractID, formData } = body;
+    logger.info(`contractID: ${contractID}`);
+    logger.info('formData:', JSON.stringify(formData, null, 2));
 
     // Solo validamos que exista el contractID y formData
     if (!contractID || !formData) {
-      logger.error('Datos incompletos en la solicitud');
+      logger.error('Datos incompletos en la solicitud', {
+        hasContractID: !!contractID,
+        hasFormData: !!formData
+      });
       return NextResponse.json(
         { error: "Missing required fields: contractID and formData" },
         { status: 400, headers }
@@ -68,26 +80,43 @@ export async function POST(req) {
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
     };
 
+    logger.info('Datos preparados para Supabase:', JSON.stringify(supabaseData, null, 2));
+
     // Si hay URLs de PDF o DOC, las agregamos
-    if (body.pdfUrl) supabaseData.PDFFile = body.pdfUrl;
-    if (body.docUrl) supabaseData.DOCFile = body.docUrl;
+    if (body.pdfUrl) {
+      logger.info(`Agregando PDF URL: ${body.pdfUrl}`);
+      supabaseData.PDFFile = body.pdfUrl;
+    }
+    if (body.docUrl) {
+      logger.info(`Agregando DOC URL: ${body.docUrl}`);
+      supabaseData.DOCFile = body.docUrl;
+    }
 
     // Insertar en Supabase
+    logger.info('Intentando insertar en Supabase');
     const { data, error } = await supabase
       .from('1.00 - Contrato de Locación de Vivienda - Database')
       .insert([supabaseData])
       .select();
 
     if (error) {
-      logger.error(`Error Supabase: ${error.message}`);
+      logger.error('Error Supabase:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
       return NextResponse.json(
         { error: "Error saving to database" },
         { status: 500, headers }
       );
     }
 
+    logger.info('Datos insertados exitosamente en Supabase:', JSON.stringify(data, null, 2));
+
     // Solo interactuamos con Webflow si hay URLs de documentos
     if (body.pdfUrl && body.docUrl) {
+      logger.info('Iniciando interacción con Webflow');
       const webflowResult = await interactWithWebflow(
         contractID,
         process.env.WEBFLOW_API_TOKEN,
@@ -105,16 +134,20 @@ export async function POST(req) {
       );
 
       if (!webflowResult.success) {
-        logger.error(`Error Webflow: ${webflowResult.error}`);
+        logger.error('Error Webflow:', webflowResult.error);
         return NextResponse.json(
           { error: "Error updating Webflow" },
           { status: 500, headers }
         );
       }
+      logger.info('Webflow actualizado exitosamente');
+    } else {
+      logger.info('Omitiendo interacción con Webflow - no hay URLs de documentos');
     }
 
     // Solo enviamos emails si hay URLs de documentos
     if (body.pdfUrl && body.docUrl) {
+      logger.info('Iniciando envío de emails');
       await sendEmailNotification(
         formData.memberEmail || null,
         formData.guestEmail || null,
@@ -123,8 +156,12 @@ export async function POST(req) {
         Object.values(formData),
         Object.keys(formData)
       );
+      logger.info('Emails enviados exitosamente');
+    } else {
+      logger.info('Omitiendo envío de emails - no hay URLs de documentos');
     }
 
+    logger.info('Proceso completado exitosamente');
     return NextResponse.json(
       { 
         success: true, 
@@ -134,7 +171,11 @@ export async function POST(req) {
     );
 
   } catch (error) {
-    logger.error(`Error: ${error.message}`);
+    logger.error('Error en el proceso:', {
+      message: error.message,
+      stack: error.stack,
+      body: error.body
+    });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers }
