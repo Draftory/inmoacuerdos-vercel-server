@@ -128,7 +128,8 @@ export async function POST(req) {
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
         contractData: contract,
-        paymentId: paymentId
+        headers: Object.keys(contract),
+        values: Object.values(contract)
       };
 
       try {
@@ -206,11 +207,18 @@ export async function POST(req) {
             }
           } else {
             logger.error('No se recibieron URLs de documentos de AppScript', contractID);
+            if (appsScriptResponseData?.logs) {
+              logger.error('Logs de AppScript:', appsScriptResponseData.logs);
+            }
           }
         } else {
           logger.error(
             `[use-token] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
           );
+          const errorData = await appsScriptResponse.json();
+          if (errorData?.logs) {
+            logger.error('Logs de AppScript:', errorData.logs);
+          }
         }
       } catch (error) {
         logger.error(
