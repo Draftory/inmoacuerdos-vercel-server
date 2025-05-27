@@ -54,8 +54,10 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
+  let contractID;
   try {
-    const { contractID, memberstackID } = await req.json();
+    const { contractID: id, memberstackID } = await req.json();
+    contractID = id;
     logger.info('Inicio del proceso', contractID);
 
     if (!contractID || !memberstackID) {
