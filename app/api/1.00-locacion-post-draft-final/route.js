@@ -38,18 +38,20 @@ export async function POST(req) {
     const body = await req.json();
     logger.info('Body recibido:', JSON.stringify(body, null, 2));
 
-    const { contractID, formData } = body;
+    // El body viene como array, tomamos el primer elemento
+    const formData = Array.isArray(body) ? body[0] : body;
+    const contractID = formData.contractID;
+
     logger.info(`contractID: ${contractID}`);
     logger.info('formData:', JSON.stringify(formData, null, 2));
 
-    // Solo validamos que exista el contractID y formData
-    if (!contractID || !formData) {
+    // Solo validamos que exista el contractID
+    if (!contractID) {
       logger.error('Datos incompletos en la solicitud', {
-        hasContractID: !!contractID,
-        hasFormData: !!formData
+        hasContractID: !!contractID
       });
       return NextResponse.json(
-        { error: "Missing required fields: contractID and formData" },
+        { error: "Missing required field: contractID" },
         { status: 400, headers }
       );
     }
@@ -83,13 +85,13 @@ export async function POST(req) {
     logger.info('Datos preparados para Supabase:', JSON.stringify(supabaseData, null, 2));
 
     // Si hay URLs de PDF o DOC, las agregamos
-    if (body.pdfUrl) {
-      logger.info(`Agregando PDF URL: ${body.pdfUrl}`);
-      supabaseData.PDFFile = body.pdfUrl;
+    if (formData.PDFFile) {
+      logger.info(`Agregando PDF URL: ${formData.PDFFile}`);
+      supabaseData.PDFFile = formData.PDFFile;
     }
-    if (body.docUrl) {
-      logger.info(`Agregando DOC URL: ${body.docUrl}`);
-      supabaseData.DOCFile = body.docUrl;
+    if (formData.DOCFile) {
+      logger.info(`Agregando DOC URL: ${formData.DOCFile}`);
+      supabaseData.DOCFile = formData.DOCFile;
     }
 
     // Insertar en Supabase
@@ -115,7 +117,7 @@ export async function POST(req) {
     logger.info('Datos insertados exitosamente en Supabase:', JSON.stringify(data, null, 2));
 
     // Solo interactuamos con Webflow si hay URLs de documentos
-    if (body.pdfUrl && body.docUrl) {
+    if (formData.PDFFile && formData.DOCFile) {
       logger.info('Iniciando interacción con Webflow');
       const webflowResult = await interactWithWebflow(
         contractID,
@@ -123,8 +125,8 @@ export async function POST(req) {
         process.env.WEBFLOW_COLLECTION_ID,
         Object.keys(formData),
         Object.values(formData),
-        body.pdfUrl,
-        body.docUrl,
+        formData.PDFFile,
+        formData.DOCFile,
         Object.values(formData),
         null,
         null,
@@ -146,13 +148,13 @@ export async function POST(req) {
     }
 
     // Solo enviamos emails si hay URLs de documentos
-    if (body.pdfUrl && body.docUrl) {
+    if (formData.PDFFile && formData.DOCFile) {
       logger.info('Iniciando envío de emails');
       await sendEmailNotification(
-        formData.memberEmail || null,
-        formData.guestEmail || null,
-        body.pdfUrl,
-        body.docUrl,
+        formData.emailMember || null,
+        formData.emailGuest || null,
+        formData.PDFFile,
+        formData.DOCFile,
         Object.values(formData),
         Object.keys(formData)
       );
