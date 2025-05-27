@@ -146,52 +146,32 @@ export async function POST(req) {
 
       logger.info('Datos insertados exitosamente en Supabase:', JSON.stringify(data, null, 2));
 
-      // Solo interactuamos con Webflow si hay URLs de documentos
-      if (formData.PDFFile && formData.DOCFile) {
-        logger.info('Iniciando interacción con Webflow');
-        const webflowResult = await interactWithWebflow(
-          contractID,
-          process.env.WEBFLOW_API_TOKEN,
-          process.env.WEBFLOW_COLLECTION_ID,
-          Object.keys(formData),
-          Object.values(formData),
-          formData.PDFFile,
-          formData.DOCFile,
-          Object.values(formData),
-          null,
-          null,
-          null,
-          null,
-          -1
-        );
+      // Siempre interactuamos con Webflow
+      logger.info('Iniciando interacción con Webflow');
+      const webflowResult = await interactWithWebflow(
+        contractID,
+        process.env.WEBFLOW_API_TOKEN,
+        process.env.WEBFLOW_COLLECTION_ID,
+        Object.keys(formData),
+        Object.values(formData),
+        formData.PDFFile || null,
+        formData.DOCFile || null,
+        Object.values(formData),
+        null,
+        null,
+        null,
+        null,
+        -1
+      );
 
-        if (!webflowResult.success) {
-          logger.error('Error Webflow:', webflowResult.error);
-          return NextResponse.json(
-            { error: "Error updating Webflow" },
-            { status: 500, headers }
-          );
-        }
-        logger.info('Webflow actualizado exitosamente');
-      } else {
-        logger.info('Omitiendo interacción con Webflow - no hay URLs de documentos');
-      }
-
-      // Solo enviamos emails si hay URLs de documentos
-      if (formData.PDFFile && formData.DOCFile) {
-        logger.info('Iniciando envío de emails');
-        await sendEmailNotification(
-          formData.emailMember || null,
-          formData.emailGuest || null,
-          formData.PDFFile,
-          formData.DOCFile,
-          Object.values(formData),
-          Object.keys(formData)
+      if (!webflowResult.success) {
+        logger.error('Error Webflow:', webflowResult.error);
+        return NextResponse.json(
+          { error: "Error updating Webflow" },
+          { status: 500, headers }
         );
-        logger.info('Emails enviados exitosamente');
-      } else {
-        logger.info('Omitiendo envío de emails - no hay URLs de documentos');
       }
+      logger.info('Webflow actualizado exitosamente');
 
       logger.info('Proceso completado exitosamente');
       return NextResponse.json(
