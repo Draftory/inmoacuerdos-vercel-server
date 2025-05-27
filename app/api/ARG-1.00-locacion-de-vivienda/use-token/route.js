@@ -32,6 +32,24 @@ const allowedOrigins = [
   "https://inmoacuerdos.webflow.io",
 ];
 
+// Función helper para crear respuestas consistentes
+function createResponse(data, status = 200) {
+  const headers = {
+    'Content-Type': 'application/json',
+    "Access-Control-Allow-Origin": allowedOrigins[0],
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+
+  return new NextResponse(
+    JSON.stringify(data),
+    {
+      status,
+      headers
+    }
+  );
+}
+
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
   const headers = {
@@ -62,10 +80,9 @@ export async function POST(req) {
 
     if (!contractID || !memberstackID) {
       logger.error('contractID o memberstackID faltantes', contractID);
-      return createErrorResponse(
-        "contractID and memberstackID are required.",
-        400,
-        responseHeaders
+      return createResponse(
+        { error: "contractID and memberstackID are required." },
+        400
       );
     }
 
@@ -76,10 +93,9 @@ export async function POST(req) {
 
     if (!member || parseInt(member.metaData?.tokens || 0, 10) <= 0) {
       logger.error('Usuario sin tokens disponibles', contractID);
-      return createErrorResponse(
-        "No tokens available.",
-        403,
-        responseHeaders
+      return createResponse(
+        { error: "No tokens available." },
+        403
       );
     }
 
@@ -93,10 +109,9 @@ export async function POST(req) {
 
     if (error || !contract) {
       logger.error('Contrato no encontrado en Supabase', contractID);
-      return createErrorResponse(
-        "Contract not found.",
-        404,
-        responseHeaders
+      return createResponse(
+        { error: "Contract not found." },
+        404
       );
     }
 
@@ -210,6 +225,13 @@ export async function POST(req) {
             if (appsScriptResponseData?.logs) {
               logger.error('Logs de AppScript:', appsScriptResponseData.logs);
             }
+            return createResponse(
+              { 
+                error: "Error al generar documentos: No se recibieron URLs válidas",
+                logs: appsScriptResponseData?.logs || []
+              },
+              500
+            );
           }
         } else {
           logger.error(
@@ -219,11 +241,25 @@ export async function POST(req) {
           if (errorData?.logs) {
             logger.error('Logs de AppScript:', errorData.logs);
           }
+          return createResponse(
+            { 
+              error: `Error al generar documentos: ${errorData?.error || 'Error desconocido'}`,
+              logs: errorData?.logs || []
+            },
+            500
+          );
         }
       } catch (error) {
         logger.error(
           `[use-token] Error al interactuar con Apps Script para contractID: ${contractID}:`,
           error
+        );
+        return createResponse(
+          { 
+            error: `Error al interactuar con Apps Script: ${error.message}`,
+            logs: []
+          },
+          500
         );
       }
     } else if (contract.payment_id) {
@@ -256,16 +292,15 @@ export async function POST(req) {
     }
 
     logger.info('Proceso completado', contractID);
-    return createSuccessResponse(
+    return createResponse(
       { message: "Token used successfully." },
-      responseHeaders
+      200
     );
   } catch (error) {
     logger.error(`Error: ${error.message}`, contractID);
-    return createErrorResponse(
-      error.message,
-      500,
-      responseHeaders
+    return createResponse(
+      { error: error.message },
+      500
     );
   }
 }
