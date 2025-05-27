@@ -84,6 +84,38 @@ export async function POST(request) {
         }
 
         logger.info('Estado del pago actualizado exitosamente en Supabase', contractId);
+
+        // Llamar a update-payment-status para manejar la generación de documentos
+        const updatePaymentStatusUrl = `${process.env.NEXT_PUBLIC_VERCEL_URL}/api/ARG-Mercadopago/update-payment-status`;
+        const updateData = {
+          contractID: contractId,
+          payment_id: dataId,
+          estadoDePago: paymentStatus === "approved" ? "Pagado" : paymentStatus,
+          fechaDePago: paymentDate ? new Date(paymentDate).toISOString() : null,
+          memberstackID: memberstackId,
+          tipoDePago: tipoDePago || 'Mercado Pago'
+        };
+
+        const response = await fetch(updatePaymentStatusUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData),
+        });
+
+        if (!response.ok) {
+          logger.error(`Error al llamar a update-payment-status: ${response.statusText}`, contractId);
+          return new Response(
+            JSON.stringify({
+              error: "Failed to process payment status update.",
+              details: await response.text()
+            }),
+            { status: 500 }
+          );
+        }
+
+        logger.info('Proceso de actualización de pago completado', contractId);
         return new Response(
           JSON.stringify({ message: "Payment status updated successfully." }),
           { status: 200 }
