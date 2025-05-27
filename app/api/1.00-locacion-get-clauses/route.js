@@ -1,5 +1,5 @@
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from "next/server";
-import Airtable from "airtable";
 import { logger } from '../../utils/logger';
 
 // List of allowed origins
@@ -25,42 +25,23 @@ export async function GET(req) {
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
 
-    const airtablePersonalAccessToken = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
-    const airtableBaseId = process.env.AIRTABLE_BASE_ID_CLAUSES;
-    const airtableTableName = process.env.AIRTABLE_TABLE_NAME || "Clausulas-locacion-vivienda";
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY
+    );
 
-    if (!airtablePersonalAccessToken) {
-      logger.error('Token Airtable faltante');
-      throw new Error("AIRTABLE_PERSONAL_ACCESS_TOKEN is not set");
+    const { data: clauses, error } = await supabase
+      .from('1.00 - Contrato de Locación de Vivienda - Clausulas')
+      .select('*');
+
+    if (error) {
+      logger.error(`Error Supabase: ${error.message}`);
+      throw error;
     }
-    if (!airtableBaseId) {
-      logger.error('Base ID Airtable faltante');
-      throw new Error("AIRTABLE_BASE_ID_CLAUSES is not set");
-    }
 
-    const base = new Airtable({ apiKey: airtablePersonalAccessToken }).base(airtableBaseId);
-
-    return new Promise((resolve, reject) => {
-      const records = [];
-      base(airtableTableName)
-        .select()
-        .eachPage(
-          function page(partialRecords, fetchNextPage) {
-            records.push(...partialRecords);
-            fetchNextPage();
-          },
-          function done(err) {
-            if (err) {
-              logger.error(`Error Airtable: ${err.message}`);
-              resolve(NextResponse.error({ status: 500, headers }));
-              return;
-            }
-            const values = records.map((record) => Object.values(record.fields));
-            const airtableResponse = { values };
-            resolve(NextResponse.json(airtableResponse, { headers }));
-          }
-        );
-    });
+    // Transformar los datos al formato esperado por el frontend
+    const values = clauses.map(clause => [clause.Clausula]);
+    return NextResponse.json({ values }, { headers });
   } catch (error) {
     logger.error(`Error: ${error.message}`);
     return NextResponse.error({ status: 500, headers });

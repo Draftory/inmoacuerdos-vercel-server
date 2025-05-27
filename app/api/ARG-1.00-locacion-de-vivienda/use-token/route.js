@@ -1,4 +1,5 @@
 // app/api/ARG-1.00-locacion-de-vivienda/use-token/route.js
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import memberstackAdmin from "@memberstack/admin";
@@ -19,13 +20,17 @@ import {
 } from "../../../utils/responseUtils";
 import { logger } from '../../../utils/logger';
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+const memberstack = memberstackAdmin.init(process.env.MEMBERSTACK_SECRET_KEY);
+
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
   "https://inmoacuerdos.webflow.io",
 ];
-
-// Initialize Memberstack
-const memberstack = memberstackAdmin.init(process.env.MEMBERSTACK_SECRET_KEY);
 
 export async function OPTIONS(req) {
   const origin = req.headers.get("origin");
@@ -62,22 +67,12 @@ export async function POST(req) {
       );
     }
 
-    // Check if user has tokens available
+    // Verificar tokens en Memberstack
     const { data: member } = await memberstack.members.retrieve({
       id: memberstackID,
     });
 
-    if (!member) {
-      logger.error('Miembro no encontrado en Memberstack', contractID);
-      return createErrorResponse(
-        "Member not found in Memberstack.",
-        404,
-        responseHeaders
-      );
-    }
-
-    const currentTokens = parseInt(member.metaData?.tokens || 0, 10);
-    if (currentTokens <= 0) {
+    if (!member || parseInt(member.metaData?.tokens || 0, 10) <= 0) {
       logger.error('Usuario sin tokens disponibles', contractID);
       return createErrorResponse(
         "No tokens available.",
@@ -86,212 +81,155 @@ export async function POST(req) {
       );
     }
 
-    const sheets = await getGoogleSheetsClient(
-      process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET
-    );
-    const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
-    const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
-    const headerRow = await getSheetHeaderRow(sheets, spreadsheetId, sheetName);
-    const contractIDColumnIndex = headerRow.indexOf("contractID");
-    const memberstackIDColumnIndex = headerRow.indexOf("MemberstackID");
-    const emailMemberColumnIndex = headerRow.indexOf("emailMember");
-    const emailGuestColumnIndex = headerRow.indexOf("emailGuest");
-    const tipoDePagoColumnIndex = headerRow.indexOf("tipoDePago");
-    const estadoDePagoColumnIndex = headerRow.indexOf("estadoDePago");
-    const paymentIdColumnIndex = headerRow.indexOf("payment_id");
-    const fechaDePagoColumnIndex = headerRow.indexOf("fechaDePago");
-    const pdfFileColumnIndex = headerRow.indexOf("PDFFile");
-    const docFileColumnIndex = headerRow.indexOf("DOCFile");
-    const editlinkColumnIndex = headerRow.indexOf("Editlink");
+    // Obtener contrato de Supabase
+    const { data: contract, error } = await supabase
+      .from('1.00 - Contrato de Locación de Vivienda - Database')
+      .select('*')
+      .eq('contractID', contractID)
+      .eq('MemberstackID', memberstackID)
+      .single();
 
-    if (contractIDColumnIndex === -1 || memberstackIDColumnIndex === -1) {
-      logger.error('Columnas esenciales no encontradas en la hoja', contractID);
+    if (error || !contract) {
+      logger.error('Contrato no encontrado en Supabase', contractID);
       return createErrorResponse(
-        "Columnas esenciales no encontradas en la hoja de cálculo.",
-        500,
-        responseHeaders
-      );
-    }
-
-    const { rowIndex, rowData: rowDataToPass } = await findRowByColumns(
-      sheets,
-      spreadsheetId,
-      sheetName,
-      ["contractID", "MemberstackID"],
-      [contractID, memberstackID]
-    );
-
-    if (rowIndex === -1) {
-      logger.warn('No se encontró entrada coincidente', contractID);
-      return createErrorResponse(
-        "No se encontró entrada coincidente.",
+        "Contract not found.",
         404,
         responseHeaders
       );
     }
 
-    const updatedRowValues = [...rowDataToPass];
-    const existingPaymentId = updatedRowValues[paymentIdColumnIndex];
     const paymentId = uuidv4();
     const nowArgentina = new Date().toLocaleString("en-US", {
       timeZone: "America/Argentina/Buenos_Aires",
     });
 
-    updatedRowValues[tipoDePagoColumnIndex] = "Token";
-    updatedRowValues[estadoDePagoColumnIndex] = "Pagado";
-    updatedRowValues[paymentIdColumnIndex] = paymentId;
-    updatedRowValues[fechaDePagoColumnIndex] = nowArgentina;
+    // Actualizar contrato en Supabase
+    const { error: updateError } = await supabase
+      .from('1.00 - Contrato de Locación de Vivienda - Database')
+      .update({
+        tipoDePago: 'Token',
+        estadoDePago: 'Pagado',
+        payment_id: paymentId,
+        fechaDePago: nowArgentina,
+        updated_at: new Date().toISOString()
+      })
+      .eq('contractID', contractID)
+      .eq('MemberstackID', memberstackID);
 
-    const lastColumnLetter = getColumnLetter(updatedRowValues.length);
-    await updateSheetRow(
-      sheets,
-      spreadsheetId,
-      sheetName,
-      `A${rowIndex}:${lastColumnLetter}${rowIndex}`,
-      updatedRowValues
-    );
-    logger.info('Hoja de cálculo actualizada', contractID);
+    if (updateError) {
+      throw updateError;
+    }
 
-    if (
-      !existingPaymentId &&
-      process.env.APPS_SCRIPT_GENERATE_DOC_URL &&
-      process.env.VERCEL_API_SECRET
-    ) {
-      logger.info('Solicitando generación de documentos', contractID);
+    // Generar documentos si es necesario
+    if (!contract.payment_id && process.env.APPS_SCRIPT_GENERATE_DOC_URL) {
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
-        spreadsheetId: spreadsheetId,
-        sheetName: sheetName,
-        rowNumber: rowIndex,
-        rowData: rowDataToPass,
-        headers: headerRow,
+        contractData: contract,
+        paymentId: paymentId
       };
-      try {
-        const appsScriptResponse = await fetch(
-          process.env.APPS_SCRIPT_GENERATE_DOC_URL,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(dataToSendToAppsScript),
-          }
-        );
-        if (appsScriptResponse.ok) {
-          const appsScriptResponseData = await appsScriptResponse.json();
-          logger.info('Documentos generados', contractID);
-          const pdfUrl = appsScriptResponseData?.pdfUrl;
-          const docUrl = appsScriptResponseData?.docUrl;
-          logger.info(`Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`);
 
-          // Decrement token after successful document generation
-          const updatedTokens = currentTokens - 1;
-          await memberstack.members.update({
-            id: memberstackID,
-            data: {
-              metaData: {
-                ...member.metaData,
-                tokens: updatedTokens,
-              },
-            },
-          });
+      const appsScriptResponse = await fetch(
+        process.env.APPS_SCRIPT_GENERATE_DOC_URL,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(dataToSendToAppsScript),
+        }
+      );
 
-          // If user has no tokens left, remove from Has Credits plan
-          if (updatedTokens === 0 && process.env.HAS_CREDITS_PLAN_ID) {
-            await memberstack.members.removeFreePlan({
-              id: memberstackID,
-              data: {
-                planId: process.env.HAS_CREDITS_PLAN_ID,
-              },
-            });
-            logger.info('Usuario removido del plan Has Credits', contractID);
-          }
+      if (appsScriptResponse.ok) {
+        const appsScriptResponseData = await appsScriptResponse.json();
+        const pdfUrl = appsScriptResponseData?.pdfUrl;
+        const docUrl = appsScriptResponseData?.docUrl;
 
-          const webflowApiToken = process.env.WEBFLOW_API_TOKEN;
-          if (
-            webflowApiToken &&
-            process.env.WEBFLOW_USER_COLLECTION_ID &&
-            pdfUrl &&
-            docUrl
-          ) {
-            const webflowUpdateResult = await interactWithWebflow(
-              contractID,
-              webflowApiToken,
-              process.env.WEBFLOW_USER_COLLECTION_ID,
-              headerRow,
-              updatedRowValues,
-              pdfUrl,
-              docUrl,
-              rowDataToPass,
-              sheets,
-              spreadsheetId,
-              sheetName,
-              rowIndex,
-              editlinkColumnIndex
-            );
-            
-            if (webflowUpdateResult.success) {
-              logger.info('Webflow actualizado exitosamente', contractID);
-            } else {
-              logger.error(`Error actualizando Webflow: ${webflowUpdateResult.error}`, contractID);
-              if (webflowUpdateResult.details) {
-                logger.error(`Detalles del error: ${JSON.stringify(webflowUpdateResult.details)}`, contractID);
-              }
-            }
-          } else {
-            logger.warn('No se actualizará Webflow', contractID);
-          }
+        // Actualizar URLs de documentos en Supabase
+        await supabase
+          .from('1.00 - Contrato de Locación de Vivienda - Database')
+          .update({
+            PDFFile: pdfUrl,
+            DOCFile: docUrl
+          })
+          .eq('contractID', contractID)
+          .eq('MemberstackID', memberstackID);
 
-          let emailMember =
-            emailMemberColumnIndex !== -1
-              ? updatedRowValues[emailMemberColumnIndex]
-              : undefined;
-          let emailGuest =
-            emailGuestColumnIndex !== -1
-              ? updatedRowValues[emailGuestColumnIndex]
-              : undefined;
-
-          if (pdfUrl && docUrl && (emailMember || emailGuest)) {
-            const emailSent = await sendEmailNotification(
-              emailMember,
-              emailGuest,
-              pdfUrl,
-              docUrl,
-              updatedRowValues,
-              headerRow
-            );
-            logger.info('Notificación de correo electrónico enviada', contractID);
-          } else {
-            logger.warn('No se enviará notificación por correo electrónico', contractID);
-          }
-        } else {
-          logger.error(
-            `[use-token] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
+        // Actualizar Webflow
+        if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_USER_COLLECTION_ID) {
+          await interactWithWebflow(
+            contractID,
+            process.env.WEBFLOW_API_TOKEN,
+            process.env.WEBFLOW_USER_COLLECTION_ID,
+            Object.keys(contract),
+            Object.values(contract),
+            pdfUrl,
+            docUrl,
+            Object.values(contract),
+            null,
+            null,
+            null,
+            null,
+            Object.keys(contract).indexOf("Editlink")
           );
         }
-      } catch (error) {
-        logger.error(
-          `[use-token] Error al interactuar con Apps Script para contractID: ${contractID}:`,
-          error
-        );
       }
-    } else if (existingPaymentId) {
-      logger.info('Pago existente encontrado, omitiendo generación y notificaciones', contractID);
+    }
+
+    // Actualizar tokens en Memberstack
+    const updatedTokens = parseInt(member.metaData?.tokens || 0, 10) - 1;
+    await memberstack.members.update({
+      id: memberstackID,
+      data: {
+        metaData: {
+          ...member.metaData,
+          tokens: updatedTokens,
+        },
+      },
+    });
+
+    // If user has no tokens left, remove from Has Credits plan
+    if (updatedTokens === 0 && process.env.HAS_CREDITS_PLAN_ID) {
+      await memberstack.members.removeFreePlan({
+        id: memberstackID,
+        data: {
+          planId: process.env.HAS_CREDITS_PLAN_ID,
+        },
+      });
+      logger.info('Usuario removido del plan Has Credits', contractID);
+    }
+
+    let emailMember =
+      contract.emailMember
+        ? contract.emailMember
+        : undefined;
+    let emailGuest =
+      contract.emailGuest
+        ? contract.emailGuest
+        : undefined;
+
+    if (pdfUrl && docUrl && (emailMember || emailGuest)) {
+      const emailSent = await sendEmailNotification(
+        emailMember,
+        emailGuest,
+        pdfUrl,
+        docUrl,
+        Object.values(contract),
+        Object.keys(contract)
+      );
+      logger.info('Notificación de correo electrónico enviada', contractID);
     } else {
-      logger.warn('No se generarán documentos, configuración faltante', contractID);
+      logger.warn('No se enviará notificación por correo electrónico', contractID);
     }
 
     logger.info('Proceso completado', contractID);
     return createSuccessResponse(
-      {
-        message:
-          "Payment details updated successfully, follow-up initiated (if applicable).",
-        paymentId: paymentId,
-        fechaDePago: nowArgentina,
-      },
-      200,
+      { message: "Token used successfully." },
       responseHeaders
     );
   } catch (error) {
-    logger.error(`Error general: ${error.message}`, contractID);
-    return createErrorResponse(error.message, 500, responseHeaders);
+    logger.error(`Error: ${error.message}`, contractID);
+    return createErrorResponse(
+      error.message,
+      500,
+      responseHeaders
+    );
   }
 }
