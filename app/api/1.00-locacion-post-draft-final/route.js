@@ -88,6 +88,25 @@ export async function POST(req) {
     // Insertar en Supabase
     logger.info('Intentando insertar en Supabase');
     try {
+      // Primero obtenemos la estructura de la tabla
+      const { data: tableInfo, error: tableError } = await supabase
+        .from('1.00 - Contrato de Locación de Vivienda - Database')
+        .select('*')
+        .limit(1);
+
+      if (tableError) {
+        logger.error('Error al obtener estructura de la tabla:', {
+          error: tableError,
+          message: tableError.message
+        });
+      } else {
+        logger.info('Estructura actual de la tabla:', {
+          existingColumns: Object.keys(tableInfo[0] || {}),
+          attemptedColumns: Object.keys(supabaseData)
+        });
+      }
+
+      // Ahora intentamos la inserción
       const { data, error } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
         .insert([supabaseData])
@@ -103,25 +122,24 @@ export async function POST(req) {
           errorObject: JSON.stringify(error, null, 2)
         });
 
-        // Intentar obtener la estructura de la tabla
-        const { data: tableInfo, error: tableError } = await supabase
-          .from('1.00 - Contrato de Locación de Vivienda - Database')
-          .select('*')
-          .limit(1);
+        // Comparar columnas
+        const existingColumns = tableInfo ? Object.keys(tableInfo[0] || {}) : [];
+        const attemptedColumns = Object.keys(supabaseData);
+        const missingColumns = attemptedColumns.filter(col => !existingColumns.includes(col));
 
-        if (!tableError) {
-          logger.info('Estructura actual de la tabla:', {
-            columns: Object.keys(tableInfo[0] || {}),
-            attemptedColumns: Object.keys(supabaseData)
-          });
-        }
+        logger.error('Columnas faltantes:', {
+          missingColumns,
+          existingColumns,
+          attemptedColumns
+        });
 
         return NextResponse.json(
           { 
             error: "Error saving to database", 
             details: error.message,
-            attemptedColumns: Object.keys(supabaseData),
-            existingColumns: tableInfo ? Object.keys(tableInfo[0] || {}) : []
+            missingColumns,
+            existingColumns,
+            attemptedColumns
           },
           { status: 500, headers }
         );
