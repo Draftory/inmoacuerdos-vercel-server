@@ -76,20 +76,15 @@ export async function POST(req) {
       }
     });
 
-    logger.info('Datos preparados para Supabase:', JSON.stringify(supabaseData, null, 2));
-
     // Si hay URLs de PDF o DOC, las agregamos
     if (formData.PDFFile) {
-      logger.info(`Agregando PDF URL: ${formData.PDFFile}`);
       supabaseData.PDFFile = formData.PDFFile;
     }
     if (formData.DOCFile) {
-      logger.info(`Agregando DOC URL: ${formData.DOCFile}`);
       supabaseData.DOCFile = formData.DOCFile;
     }
 
     // Insertar en Supabase
-    logger.info('Intentando insertar en Supabase');
     try {
       // Primero obtenemos la estructura de la tabla
       const { data: tableInfo, error: tableError } = await supabase
@@ -98,16 +93,11 @@ export async function POST(req) {
         .limit(1);
 
       if (tableError) {
-        logger.error('Error al obtener estructura de la tabla:', JSON.stringify({
-          error: tableError,
-          message: tableError.message
-        }, null, 2));
         throw tableError;
       }
 
       // Obtenemos las columnas existentes en la tabla
       const existingColumns = Object.keys(tableInfo[0] || {});
-      logger.info('Columnas existentes en la tabla:', JSON.stringify(existingColumns, null, 2));
 
       // Filtramos los datos para incluir solo las columnas que existen en la tabla
       const filteredData = Object.keys(supabaseData).reduce((acc, key) => {
@@ -117,8 +107,6 @@ export async function POST(req) {
         return acc;
       }, {});
 
-      logger.info('Datos filtrados para Supabase:', JSON.stringify(filteredData, null, 2));
-
       // Ahora intentamos la inserción con los datos filtrados
       const { data, error } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
@@ -126,28 +114,13 @@ export async function POST(req) {
         .select();
 
       if (error) {
-        logger.error('Error Supabase:', JSON.stringify({
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          data: filteredData,
-          errorObject: error
-        }, null, 2));
-
         return NextResponse.json(
-          { 
-            error: "Error saving to database", 
-            details: error.message
-          },
+          { error: "Error saving to database", details: error.message },
           { status: 500, headers }
         );
       }
 
-      logger.info('Datos insertados exitosamente en Supabase:', JSON.stringify(data, null, 2));
-
       // Siempre interactuamos con Webflow
-      logger.info('Iniciando interacción con Webflow');
       const webflowResult = await interactWithWebflow(
         contractID,
         process.env.WEBFLOW_API_TOKEN,
@@ -157,23 +130,20 @@ export async function POST(req) {
         formData.PDFFile || null,
         formData.DOCFile || null,
         Object.values(formData),
-        null,
-        null,
-        null,
-        null,
-        -1
+        null,  // sheets
+        null,  // spreadsheetId
+        null,  // sheetName
+        -1,    // rowIndex
+        -1     // editlinkColumnIndex
       );
 
       if (!webflowResult.success) {
-        logger.error('Error Webflow:', webflowResult.error);
         return NextResponse.json(
-          { error: "Error updating Webflow" },
+          { error: "Error updating Webflow", details: webflowResult.error },
           { status: 500, headers }
         );
       }
-      logger.info('Webflow actualizado exitosamente');
 
-      logger.info('Proceso completado exitosamente');
       return NextResponse.json(
         { 
           success: true, 
