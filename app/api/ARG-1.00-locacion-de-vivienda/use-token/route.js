@@ -9,12 +9,6 @@ import {
 } from "../../../utils/apiUtils";
 import { getColumnLetter } from "../../../utils/helpers";
 import {
-  getGoogleSheetsClient,
-  getSheetHeaderRow,
-  updateSheetRow,
-  findRowByColumns,
-} from "../../../utils/googleSheetsUtils";
-import {
   createErrorResponse,
   createSuccessResponse,
 } from "../../../utils/responseUtils";
