@@ -3,18 +3,13 @@ import {
   interactWithWebflow,
   sendEmailNotification,
 } from "../../../utils/apiUtils";
-import { getColumnLetter } from "../../../utils/helpers";
-import {
-  getGoogleSheetsClient,
-  getSheetHeaderRow,
-  updateSheetRow,
-  findRowByColumns,
-} from "../../../utils/googleSheetsUtils";
-import {
-  processMercadoPagoPayment,
-  updateDocumentLinks,
-} from "../../../utils/mercadopagoUtils";
+import { createClient } from '@supabase/supabase-js';
 import { logger } from '../../../utils/logger';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 const allowedOrigins = [
   "https://www.inmoacuerdos.com",
@@ -76,81 +71,32 @@ export async function POST(req) {
       );
     }
 
-    // Inicializar cliente de Google Sheets
-    const sheets = await getGoogleSheetsClient(
-      process.env.GOOGLE_APPLICATION_CREDENTIALS_SECRET
-    );
-    const spreadsheetId = process.env.LOCACION_POST_DATABASE_SHEET_ID;
-    const sheetName = process.env.LOCACION_POST_DATABASE_SHEET_NAME;
+    // Obtener contrato de Supabase
+    const { data: contract, error: fetchError } = await supabase
+      .from('1.00 - Contrato de Locación de Vivienda - Database')
+      .select('*')
+      .eq('contractID', contractID)
+      .single();
 
-    // Obtener encabezados y encontrar la fila
-    const headerRow = await getSheetHeaderRow(sheets, spreadsheetId, sheetName);
-    const contractIDColumnIndex = headerRow.indexOf("contractID");
-
-    if (contractIDColumnIndex === -1) {
-      logger.error('Columna contractID no encontrada', contractID);
+    if (fetchError || !contract) {
+      logger.error('Contrato no encontrado en Supabase', contractID);
       return createResponse(
-        { error: "Columna contractID no encontrada en la hoja de cálculo." },
-        500
-      );
-    }
-
-    // Buscar la fila usando findRowByColumns solo por contractID
-    const { rowIndex, rowData: rowDataToPass } = await findRowByColumns(
-      sheets,
-      spreadsheetId,
-      sheetName,
-      ["contractID"],
-      [contractID]
-    );
-
-    if (rowIndex === -1) {
-      logger.warn('No se encontró entrada coincidente', contractID);
-      return createResponse(
-        { error: "No se encontró entrada coincidente en la hoja de cálculo." },
+        { error: "No se encontró entrada coincidente en la base de datos." },
         404
       );
     }
 
-    // Procesar el pago y actualizar la hoja
-    const {
-      updatedRowValues,
-      paymentIdToUse,
-      fechaDePagoToUse,
-      estadoDePagoToUse,
-    } = await processMercadoPagoPayment(
-      sheets,
-      spreadsheetId,
-      sheetName,
-      headerRow,
-      paymentData,
-      rowIndex,
-      rowDataToPass
-    );
-
-    // Actualizar la hoja con los nuevos valores
-    const lastColumnLetter = getColumnLetter(updatedRowValues.length);
-    await updateSheetRow(
-      sheets,
-      spreadsheetId,
-      sheetName,
-      `A${rowIndex}:${lastColumnLetter}${rowIndex}`,
-      updatedRowValues
-    );
-
-    logger.info('Hoja actualizada', contractID);
-
     // Verificar si es un pago nuevo y está aprobado
-    const existingPaymentId = rowDataToPass[headerRow.indexOf("payment_id")];
-    if (estadoDePagoToUse === "Pagado" && !existingPaymentId) {
+    const existingPaymentId = contract.payment_id;
+    if (paymentData.estadoDePago === "Pagado" && !existingPaymentId) {
       logger.info('Solicitando generación de documentos', contractID);
       
       // Preparar datos para Apps Script
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
-        contractData: Object.fromEntries(headerRow.map((header, index) => [header, updatedRowValues[index]])),
-        headers: headerRow,
-        values: updatedRowValues
+        contractData: contract,
+        headers: Object.keys(contract),
+        values: Object.values(contract)
       };
 
       try {
@@ -171,34 +117,39 @@ export async function POST(req) {
           logger.info(`Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`);
 
           if (pdfUrl && docUrl) {
-            // Actualizar enlaces de documentos en la hoja
-            await updateDocumentLinks(
-              sheets,
-              spreadsheetId,
-              sheetName,
-              rowIndex,
-              pdfUrl,
-              docUrl,
-              headerRow.indexOf("PDFFile"),
-              headerRow.indexOf("DOCFile")
-            );
+            // Actualizar URLs de documentos en Supabase
+            const { error: updateError } = await supabase
+              .from('1.00 - Contrato de Locación de Vivienda - Database')
+              .update({
+                PDFFile: pdfUrl,
+                DOCFile: docUrl
+              })
+              .eq('contractID', contractID);
 
-            // Actualizar Webflow si está configurado
+            if (updateError) {
+              logger.error(`Error al actualizar URLs de documentos: ${updateError.message}`, contractID);
+              return createResponse(
+                { error: "Error al actualizar URLs de documentos" },
+                500
+              );
+            }
+
+            // Actualizar Webflow
             if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_USER_COLLECTION_ID) {
               const webflowUpdateResult = await interactWithWebflow(
                 contractID,
                 process.env.WEBFLOW_API_TOKEN,
                 process.env.WEBFLOW_USER_COLLECTION_ID,
-                headerRow,
-                updatedRowValues,
+                Object.keys(contract),
+                Object.values(contract),
                 pdfUrl,
                 docUrl,
-                updatedRowValues,
-                sheets,
-                spreadsheetId,
-                sheetName,
-                rowIndex,
-                headerRow.indexOf("Editlink")
+                Object.values(contract),
+                null,
+                null,
+                null,
+                null,
+                Object.keys(contract).indexOf("Editlink")
               );
               
               if (webflowUpdateResult.success) {
@@ -211,17 +162,18 @@ export async function POST(req) {
               }
             }
 
-            // Enviar notificaciones por correo
-            const emailMember = updatedRowValues[headerRow.indexOf("emailMember")];
-            const emailGuest = updatedRowValues[headerRow.indexOf("emailGuest")];
+            // Enviar notificación por correo si hay emails
+            let emailMember = contract.emailMember;
+            let emailGuest = contract.emailGuest;
+
             if (emailMember || emailGuest) {
-              await sendEmailNotification(
+              const emailSent = await sendEmailNotification(
                 emailMember,
                 emailGuest,
                 pdfUrl,
                 docUrl,
-                updatedRowValues,
-                headerRow
+                Object.values(contract),
+                Object.keys(contract)
               );
               logger.info('Notificación de correo electrónico enviada', contractID);
             } else {
@@ -242,7 +194,7 @@ export async function POST(req) {
           }
         } else {
           logger.error(
-            `[update-payment-status] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
+            `Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
           );
           const errorData = await appsScriptResponse.json();
           if (errorData?.logs) {
@@ -258,7 +210,7 @@ export async function POST(req) {
         }
       } catch (error) {
         logger.error(
-          `[update-payment-status] Error al interactuar con Apps Script para contractID: ${contractID}:`,
+          `Error al interactuar con Apps Script para contractID: ${contractID}:`,
           error
         );
         return createResponse(
@@ -277,8 +229,8 @@ export async function POST(req) {
     return createResponse(
       {
         message: "Payment details updated successfully, document generation and follow-up initiated (if applicable).",
-        paymentId: paymentIdToUse,
-        fechaDePago: fechaDePagoToUse,
+        paymentId: paymentData.payment_id,
+        fechaDePago: paymentData.fechaDePago,
       },
       200
     );
