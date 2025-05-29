@@ -150,6 +150,15 @@ export async function POST(req) {
       // Siempre interactuamos con Webflow
       const formDataKeys = Object.keys(formData);
       const formDataValues = Object.values(formData);
+      
+      // Asegurarnos de que el Editlink esté en los datos que se pasan a Webflow
+      const editlinkValue = `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`;
+      if (!formData.Editlink) {
+        formData.Editlink = editlinkValue;
+        formDataKeys.push('Editlink');
+        formDataValues.push(editlinkValue);
+      }
+      
       const editlinkIndex = formDataKeys.indexOf('Editlink');
       
       const webflowResult = await interactWithWebflow(
