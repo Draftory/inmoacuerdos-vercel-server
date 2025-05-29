@@ -91,6 +91,28 @@ export async function POST(req) {
     if (paymentData.estadoDePago === "Pagado" && !existingPaymentId) {
       logger.info('Solicitando generación de documentos', contractID);
       
+      // Actualizar información de pago en Supabase
+      const { error: updateError } = await supabase
+        .from('1.00 - Contrato de Locación de Vivienda - Database')
+        .update({
+          tipoDePago: paymentData.tipoDePago || 'Mercado Pago',
+          estadoDePago: paymentData.estadoDePago,
+          payment_id: paymentData.payment_id,
+          fechaDePago: paymentData.fechaDePago,
+          status: 'Contrato'
+        })
+        .eq('contractID', contractID);
+
+      if (updateError) {
+        logger.error(`Error al actualizar estado del pago en Supabase: ${updateError.message}`, contractID);
+        return createResponse(
+          { error: "Error al actualizar estado del pago" },
+          500
+        );
+      }
+
+      logger.info('Estado del pago actualizado exitosamente en Supabase', contractID);
+      
       // Preparar datos para Apps Script
       const dataToSendToAppsScript = {
         secret: process.env.VERCEL_API_SECRET,
