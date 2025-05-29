@@ -82,7 +82,7 @@ export async function POST(req) {
       supabaseData.DOCFile = formData.DOCFile;
     }
 
-    // Insertar en Supabase
+    // Insertar o actualizar en Supabase
     try {
       // Primero obtenemos la estructura de la tabla
       const { data: tableInfo, error: tableError } = await supabase
@@ -105,17 +105,43 @@ export async function POST(req) {
         return acc;
       }, {});
 
-      // Ahora intentamos la inserción con los datos filtrados
-      const { data, error } = await supabase
+      // Verificamos si el registro existe
+      const { data: existingRecord, error: checkError } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
-        .insert([filteredData])
-        .select();
+        .select('draftVersion')
+        .eq('contractID', contractID)
+        .single();
 
-      if (error) {
-        return NextResponse.json(
-          { error: "Error saving to database", details: error.message },
-          { status: 500, headers }
-        );
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 es el error cuando no se encuentra el registro
+        throw checkError;
+      }
+
+      let result;
+      if (existingRecord) {
+        // Si existe, actualizamos el registro
+        const { data, error } = await supabase
+          .from('1.00 - Contrato de Locación de Vivienda - Database')
+          .update({
+            ...filteredData,
+            draftVersion: (existingRecord.draftVersion || 0) + 1
+          })
+          .eq('contractID', contractID)
+          .select();
+
+        if (error) throw error;
+        result = data;
+      } else {
+        // Si no existe, creamos uno nuevo
+        const { data, error } = await supabase
+          .from('1.00 - Contrato de Locación de Vivienda - Database')
+          .insert([{
+            ...filteredData,
+            draftVersion: 1
+          }])
+          .select();
+
+        if (error) throw error;
+        result = data;
       }
 
       // Siempre interactuamos con Webflow
@@ -145,7 +171,7 @@ export async function POST(req) {
       return NextResponse.json(
         { 
           success: true, 
-          data: data[0]
+          data: result[0]
         },
         { headers }
       );
