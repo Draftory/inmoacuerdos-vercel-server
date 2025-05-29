@@ -145,20 +145,24 @@ export async function POST(req) {
       }
 
       // Siempre interactuamos con Webflow
+      const formDataKeys = Object.keys(formData);
+      const formDataValues = Object.values(formData);
+      const editlinkIndex = formDataKeys.indexOf('Editlink');
+      
       const webflowResult = await interactWithWebflow(
         contractID,
         process.env.WEBFLOW_API_TOKEN,
         process.env.WEBFLOW_USER_COLLECTION_ID,
-        Object.keys(formData),
-        Object.values(formData),
+        formDataKeys,
+        formDataValues,
         formData.PDFFile || null,
         formData.DOCFile || null,
-        Object.values(formData),
+        formDataValues,
         null,  // sheets
         null,  // spreadsheetId
         null,  // sheetName
         -1,    // rowIndex
-        Object.keys(formData).indexOf('Editlink')  // editlinkColumnIndex
+        editlinkIndex  // editlinkColumnIndex
       );
 
       if (!webflowResult.success) {
