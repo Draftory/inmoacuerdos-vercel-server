@@ -158,7 +158,7 @@ export async function POST(req) {
         null,  // spreadsheetId
         null,  // sheetName
         -1,    // rowIndex
-        -1     // editlinkColumnIndex
+        Object.keys(formData).indexOf('Editlink')  // editlinkColumnIndex
       );
 
       if (!webflowResult.success) {
