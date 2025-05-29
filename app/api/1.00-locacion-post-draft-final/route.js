@@ -108,7 +108,7 @@ export async function POST(req) {
       // Verificamos si el registro existe
       const { data: existingRecord, error: checkError } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
-        .select('draftVersion')
+        .select('draftVersion, Editlink')
         .eq('contractID', contractID)
         .single();
 
@@ -123,7 +123,9 @@ export async function POST(req) {
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .update({
             ...filteredData,
-            draftVersion: (existingRecord.draftVersion || 0) + 1
+            draftVersion: (existingRecord.draftVersion || 0) + 1,
+            // Si es un borrador y no hay Editlink en la request, usamos el existente
+            Editlink: formData.Editlink || existingRecord.Editlink || `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
           })
           .eq('contractID', contractID)
           .select();
@@ -136,7 +138,8 @@ export async function POST(req) {
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .insert([{
             ...filteredData,
-            draftVersion: 1
+            draftVersion: 1,
+            Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
           }])
           .select();
 
