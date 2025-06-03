@@ -25,11 +25,12 @@ export async function POST(req) {
 
     const memberstackId = memberstackData.payload?.id;
     const email = memberstackData.payload?.auth?.email;
-    const name = memberstackData.payload?.customFields?.name;
+    const firstName = memberstackData.payload?.customFields?.['first-name'];
+    const name = firstName || email?.split('@')[0]; // Fallback to email username if no first name
 
     console.log('Extracted Data:', { memberstackId, email, name });
 
-    if (!memberstackId || !email || !name) {
+    if (!memberstackId || !email) {
       console.error('Error: Missing required Memberstack data.');
       return new Response(JSON.stringify({ error: 'Missing required Memberstack data.' }), {
         status: 400,
