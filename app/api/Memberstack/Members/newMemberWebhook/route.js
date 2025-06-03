@@ -1,6 +1,7 @@
 // app/api/Memberstack/Members/newMemberWebhook/route.js
 import memberstackAdmin from "@memberstack/admin";
 import fetch from 'node-fetch';
+import { createClient } from '@supabase/supabase-js';
 
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const MEMBERSTACK_SECRET_KEY = process.env.MEMBERSTACK_SECRET_KEY;
@@ -10,6 +11,12 @@ const WEBFLOW_API_VERSION = 'v2';
 
 // Initialize Memberstack Admin SDK
 const memberstack = memberstackAdmin.init(MEMBERSTACK_SECRET_KEY);
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 export async function POST(req) {
   try {
@@ -28,6 +35,64 @@ export async function POST(req) {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    // Check for existing contracts with matching email
+    const { data: existingContracts, error: searchError } = await supabase
+      .from('1.00 - Contrato de Locación de Vivienda - Database')
+      .select('*')
+      .or(`emailMember.eq.${email},emailGuest.eq.${email}`);
+
+    if (searchError) {
+      console.error('Error searching for existing contracts:', searchError);
+      return new Response(JSON.stringify({ error: 'Error searching for existing contracts.' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update existing contracts with Memberstack ID
+    if (existingContracts && existingContracts.length > 0) {
+      console.log(`Found ${existingContracts.length} existing contracts for email ${email}`);
+      
+      for (const contract of existingContracts) {
+        const { error: updateError } = await supabase
+          .from('1.00 - Contrato de Locación de Vivienda - Database')
+          .update({ MemberstackID: memberstackId })
+          .eq('contractID', contract.contractID);
+
+        if (updateError) {
+          console.error(`Error updating contract ${contract.contractID}:`, updateError);
+          continue;
+        }
+
+        // Update Webflow for each existing contract
+        try {
+          const webflowUpdateResult = await fetch(
+            `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
+            {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
+              },
+              body: JSON.stringify({
+                fields: {
+                  memberstackid: memberstackId,
+                  name: contract.contractID,
+                  slug: contract.contractID,
+                }
+              }),
+            }
+          );
+
+          if (!webflowUpdateResult.ok) {
+            console.error(`Error updating Webflow for contract ${contract.contractID}`);
+          }
+        } catch (webflowError) {
+          console.error(`Error updating Webflow for contract ${contract.contractID}:`, webflowError);
+        }
+      }
     }
 
     // 1. Create a new live item in Webflow using fetch
@@ -75,7 +140,12 @@ export async function POST(req) {
           },
         });
         console.log('Memberstack member updated successfully:', updatedMember);
-        return new Response(JSON.stringify({ success: true, webflowItemId, loginRedirectUrl }), {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          webflowItemId, 
+          loginRedirectUrl,
+          existingContractsUpdated: existingContracts?.length || 0 
+        }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
