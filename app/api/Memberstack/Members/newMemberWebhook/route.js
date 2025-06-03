@@ -120,7 +120,10 @@ export async function POST(req) {
       fieldData: {
         name: name,
         slug: slug,
+        memberstackid: memberstackId,
         email: email,
+        status: 'active',
+        timestamp: new Date().toISOString()
       },
     };
     console.log('Webflow Create Item Payload:', JSON.stringify(webflowCreateItemPayload, null, 2));
