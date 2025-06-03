@@ -73,6 +73,7 @@ export async function POST(req) {
       console.log(`Found ${existingContracts.length} existing contracts for email ${email}`);
       
       for (const contract of existingContracts) {
+        // Update Supabase
         const { error: updateError } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .update({ MemberstackID: memberstackId })
@@ -104,17 +105,17 @@ export async function POST(req) {
           );
 
           if (!webflowUpdateResult.ok) {
-            console.error(`Error updating Webflow for contract ${contract.contractID}`);
+            console.error(`Error updating Webflow contract ${contract.contractID}`);
           }
         } catch (webflowError) {
-          console.error(`Error updating Webflow for contract ${contract.contractID}:`, webflowError);
+          console.error(`Error updating Webflow contract ${contract.contractID}:`, webflowError);
         }
       }
     }
 
-    // 1. Create a new live item in Webflow using fetch
+    // 1. Create a new user in Webflow Usuarios collection
     const slug = memberstackId;
-    const webflowCreateItemPayload = {
+    const webflowCreateUserPayload = {
       isArchived: false,
       isDraft: false,
       fieldData: {
@@ -123,12 +124,13 @@ export async function POST(req) {
         memberstackid: memberstackId,
         email: email,
         status: 'active',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        editlink: `/usuario/${memberstackId}`
       },
     };
-    console.log('Webflow Create Item Payload:', JSON.stringify(webflowCreateItemPayload, null, 2));
+    console.log('Webflow Create User Payload:', JSON.stringify(webflowCreateUserPayload, null, 2));
 
-    const createWebflowItemResponse = await fetch(
+    const createWebflowUserResponse = await fetch(
       `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
       {
         method: 'POST',
@@ -136,16 +138,16 @@ export async function POST(req) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
         },
-        body: JSON.stringify(webflowCreateItemPayload),
+        body: JSON.stringify(webflowCreateUserPayload),
       }
     );
 
-    console.log('Webflow Create Item Response Status:', createWebflowItemResponse.status);
-    let webflowItemData;
-    if (createWebflowItemResponse.ok) {
-      webflowItemData = await createWebflowItemResponse.json();
-      console.log('Webflow Create Item Response Data:', JSON.stringify(webflowItemData, null, 2));
-      const webflowItemId = webflowItemData.id;
+    console.log('Webflow Create User Response Status:', createWebflowUserResponse.status);
+    let webflowUserData;
+    if (createWebflowUserResponse.ok) {
+      webflowUserData = await createWebflowUserResponse.json();
+      console.log('Webflow Create User Response Data:', JSON.stringify(webflowUserData, null, 2));
+      const webflowUserId = webflowUserData.id;
 
       // 2. Update Memberstack member using @memberstack/admin
       const loginRedirectUrl = `/usuario/${memberstackId}`;
@@ -155,14 +157,14 @@ export async function POST(req) {
           data: {
             loginRedirect: loginRedirectUrl,
             metaData: {
-              'Unique Webflow ID': webflowItemId,
+              'Unique Webflow ID': webflowUserId,
             },
           },
         });
         console.log('Memberstack member updated successfully:', updatedMember);
         return new Response(JSON.stringify({ 
           success: true, 
-          webflowItemId, 
+          webflowUserId, 
           loginRedirectUrl,
           existingContractsUpdated: existingContracts?.length || 0 
         }), {
@@ -180,12 +182,12 @@ export async function POST(req) {
         );
       }
     } else {
-      const errorData = await createWebflowItemResponse.json();
-      console.error('Error creating Webflow item:', errorData);
+      const errorData = await createWebflowUserResponse.json();
+      console.error('Error creating Webflow user:', errorData);
       return new Response(
-        JSON.stringify({ error: 'Failed to create Webflow item.', details: errorData }),
+        JSON.stringify({ error: 'Failed to create Webflow user.', details: errorData }),
         {
-          status: createWebflowItemResponse.status,
+          status: createWebflowUserResponse.status,
           headers: { 'Content-Type': 'application/json' },
         }
       );
