@@ -183,7 +183,7 @@ export async function POST(req) {
         data: {
           loginRedirect: loginRedirectUrl,
           customFields: {
-            'Unique Webflow ID': webflowUserId,
+            'webflow-member-id': webflowUserId,
           },
         },
       });
