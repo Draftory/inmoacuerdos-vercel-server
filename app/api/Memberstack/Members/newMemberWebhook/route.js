@@ -122,11 +122,7 @@ export async function POST(req) {
       fieldData: {
         name: name,
         slug: slug,
-        memberstackid: memberstackId,
-        email: email,
-        status: 'active',
-        timestamp: new Date().toISOString(),
-        editlink: `/usuario/${memberstackId}`
+        email: email
       },
     };
     console.log('Webflow Create User Payload:', JSON.stringify(webflowCreateUserPayload, null, 2));
