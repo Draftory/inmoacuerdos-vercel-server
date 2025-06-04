@@ -24,9 +24,10 @@ export async function POST(req) {
     const memberstackData = await req.json();
     console.log('Received Memberstack Webhook Data:', JSON.stringify(memberstackData, null, 2));
 
-    const memberstackId = memberstackData.payload?.id;
-    const email = memberstackData.payload?.auth?.email;
-    const firstName = memberstackData.payload?.customFields?.['first-name'];
+    // Extract memberstackId from the correct location in the payload
+    const memberstackId = memberstackData.payload?.member?.id;
+    const email = memberstackData.payload?.member?.email;
+    const firstName = memberstackData.payload?.member?.customFields?.['first-name'];
     const name = firstName || email?.split('@')[0]; // Fallback to email username if no first name
 
     console.log('Extracted Data:', { 
@@ -34,7 +35,8 @@ export async function POST(req) {
       email, 
       firstName,
       name,
-      customFields: memberstackData.payload?.customFields 
+      customFields: memberstackData.payload?.member?.customFields,
+      fullPayload: memberstackData.payload
     });
 
     if (!memberstackId || !email) {
@@ -149,6 +151,12 @@ export async function POST(req) {
       // 2. Update Memberstack member using @memberstack/admin
       const loginRedirectUrl = `/usuario/${memberstackId}`;
       try {
+        console.log('Attempting to update Memberstack member:', {
+          id: memberstackId,
+          loginRedirect: loginRedirectUrl,
+          webflowUserId
+        });
+
         const { data: updatedMember } = await memberstack.members.update({
           id: memberstackId,
           data: {
