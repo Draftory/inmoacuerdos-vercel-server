@@ -41,14 +41,17 @@ export async function POST(req) {
     // El body viene como array, tomamos el primer elemento
     const formData = Array.isArray(body) ? body[0] : body;
     const contractID = formData.contractID;
+    const memberstackID = formData.MemberstackID;
 
     logger.info(`contractID: ${contractID}`);
+    logger.info(`memberstackID: ${memberstackID}`);
     logger.info('formData:', JSON.stringify(formData, null, 2));
 
     // Solo validamos que exista el contractID
     if (!contractID) {
       logger.error('Datos incompletos en la solicitud', {
-        hasContractID: !!contractID
+        hasContractID: !!contractID,
+        hasMemberstackID: !!memberstackID
       });
       return NextResponse.json(
         { error: "Missing required field: contractID" },
@@ -63,7 +66,7 @@ export async function POST(req) {
       // Luego sobrescribimos o aseguramos los campos específicos
       contractID,
       timestamp: new Date().toISOString(),
-      MemberstackID: formData.MemberstackID || null,
+      MemberstackID: memberstackID || null,  // Aseguramos que sea null si no existe
       Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
     };
 
@@ -72,6 +75,13 @@ export async function POST(req) {
       if (supabaseData[key] === undefined || supabaseData[key] === "") {
         supabaseData[key] = null;
       }
+    });
+
+    logger.info('Datos preparados para Supabase:', {
+      contractID,
+      memberstackID,
+      hasMemberstackID: !!supabaseData.MemberstackID,
+      dataKeys: Object.keys(supabaseData)
     });
 
     // Si hay URLs de PDF o DOC, las agregamos
@@ -156,7 +166,12 @@ export async function POST(req) {
         }
         result = data;
       } else {
-        logger.info('Creando nuevo registro');
+        logger.info('Creando nuevo registro con datos:', {
+          contractID,
+          memberstackID,
+          hasMemberstackID: !!filteredData.MemberstackID,
+          filteredDataKeys: Object.keys(filteredData)
+        });
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .insert([{
@@ -168,10 +183,14 @@ export async function POST(req) {
 
         if (error) {
           logger.error('Error al crear nuevo registro:', {
-            error,
+            error: JSON.stringify(error),
             code: error.code,
             message: error.message,
-            details: error.details
+            details: error.details,
+            hint: error.hint,
+            data: JSON.stringify(filteredData),
+            memberstackID: memberstackID,
+            hasMemberstackID: !!filteredData.MemberstackID
           });
           throw error;
         }
@@ -224,13 +243,21 @@ export async function POST(req) {
       );
     } catch (supabaseError) {
       logger.error('Error al interactuar con Supabase:', {
-        error: supabaseError,
+        error: JSON.stringify(supabaseError),
         message: supabaseError.message,
+        code: supabaseError.code,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
         stack: supabaseError.stack,
-        data: supabaseData
+        data: JSON.stringify(supabaseData)
       });
       return NextResponse.json(
-        { error: "Error saving to database", details: supabaseError.message },
+        { 
+          error: "Error saving to database", 
+          details: supabaseError.message,
+          code: supabaseError.code,
+          hint: supabaseError.hint
+        },
         { status: 500, headers }
       );
     }
