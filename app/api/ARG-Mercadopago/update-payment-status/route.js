@@ -157,11 +157,11 @@ export async function POST(req) {
             }
 
             // Actualizar Webflow
-            if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_USER_COLLECTION_ID) {
+            if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_CONTRACT_COLLECTION_ID) {
               const webflowUpdateResult = await interactWithWebflow(
                 contractID,
                 process.env.WEBFLOW_API_TOKEN,
-                process.env.WEBFLOW_USER_COLLECTION_ID,
+                process.env.WEBFLOW_CONTRACT_COLLECTION_ID,
                 Object.keys(contract),
                 Object.values(contract),
                 pdfUrl,
