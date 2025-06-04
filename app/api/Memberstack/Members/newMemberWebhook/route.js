@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const MEMBERSTACK_SECRET_KEY = process.env.MEMBERSTACK_SECRET_KEY;
 const WEBFLOW_USER_COLLECTION_ID = process.env.WEBFLOW_USER_COLLECTION_ID;
+const WEBFLOW_CONTRACT_COLLECTION_ID = process.env.WEBFLOW_CONTRACT_COLLECTION_ID;
 const WEBFLOW_API_BASE_URL = 'https://api.webflow.com';
 const WEBFLOW_API_VERSION = 'v2';
 
@@ -84,10 +85,10 @@ export async function POST(req) {
           continue;
         }
 
-        // Update Webflow for each existing contract
+        // Update Webflow Contratos collection
         try {
           const webflowUpdateResult = await fetch(
-            `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
+            `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_CONTRACT_COLLECTION_ID}/items/live`,
             {
               method: 'PATCH',
               headers: {
