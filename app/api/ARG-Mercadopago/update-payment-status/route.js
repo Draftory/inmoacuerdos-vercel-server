@@ -156,7 +156,7 @@ export async function POST(req) {
               );
             }
 
-            // Actualizar Webflow
+            // Actualizar Webflow - Updated environment variable name
             if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_CONTRACT_COLLECTION_ID) {
               const webflowUpdateResult = await interactWithWebflow(
                 contractID,
