@@ -170,7 +170,8 @@ export async function POST(req) {
           contractID,
           memberstackID,
           hasMemberstackID: !!filteredData.MemberstackID,
-          filteredDataKeys: Object.keys(filteredData)
+          filteredDataKeys: Object.keys(filteredData),
+          filteredDataValues: Object.values(filteredData)
         });
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
@@ -190,7 +191,11 @@ export async function POST(req) {
             hint: error.hint,
             data: JSON.stringify(filteredData),
             memberstackID: memberstackID,
-            hasMemberstackID: !!filteredData.MemberstackID
+            hasMemberstackID: !!filteredData.MemberstackID,
+            tableName: '1.00 - Contrato de Locación de Vivienda - Database',
+            operation: 'insert',
+            filteredDataKeys: Object.keys(filteredData),
+            filteredDataValues: Object.values(filteredData)
           });
           throw error;
         }
