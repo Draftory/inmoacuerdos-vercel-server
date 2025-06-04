@@ -2,7 +2,7 @@
 import memberstackAdmin from "@memberstack/admin";
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
-import { interactWithWebflow } from '../../../utils/apiUtils';
+import { interactWithWebflow } from '../../../../utils/apiUtils';
 
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const MEMBERSTACK_SECRET_KEY = process.env.MEMBERSTACK_SECRET_KEY;
