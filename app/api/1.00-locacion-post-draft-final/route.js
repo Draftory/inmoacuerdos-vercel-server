@@ -171,15 +171,25 @@ export async function POST(req) {
           memberstackID,
           hasMemberstackID: !!filteredData.MemberstackID,
           filteredDataKeys: Object.keys(filteredData),
-          filteredDataValues: Object.values(filteredData)
+          filteredDataValues: Object.values(filteredData),
+          tableName: '1.00 - Contrato de Locación de Vivienda - Database'
         });
+
+        // Log the exact data being sent to Supabase
+        const insertData = {
+          ...filteredData,
+          draftVersion: 1,
+          Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
+        };
+        logger.info('Datos a insertar en Supabase:', {
+          data: JSON.stringify(insertData, null, 2),
+          keys: Object.keys(insertData),
+          values: Object.values(insertData)
+        });
+
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
-          .insert([{
-            ...filteredData,
-            draftVersion: 1,
-            Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
-          }])
+          .insert([insertData])
           .select();
 
         if (error) {
@@ -189,13 +199,13 @@ export async function POST(req) {
             message: error.message,
             details: error.details,
             hint: error.hint,
-            data: JSON.stringify(filteredData),
+            data: JSON.stringify(insertData),
             memberstackID: memberstackID,
-            hasMemberstackID: !!filteredData.MemberstackID,
+            hasMemberstackID: !!insertData.MemberstackID,
             tableName: '1.00 - Contrato de Locación de Vivienda - Database',
             operation: 'insert',
-            filteredDataKeys: Object.keys(filteredData),
-            filteredDataValues: Object.values(filteredData)
+            filteredDataKeys: Object.keys(insertData),
+            filteredDataValues: Object.values(insertData)
           });
           throw error;
         }
