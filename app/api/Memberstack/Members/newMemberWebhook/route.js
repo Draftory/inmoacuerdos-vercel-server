@@ -2,6 +2,7 @@
 import memberstackAdmin from "@memberstack/admin";
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
+import { interactWithWebflow } from '../../../utils/apiUtils';
 
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const MEMBERSTACK_SECRET_KEY = process.env.MEMBERSTACK_SECRET_KEY;
@@ -89,26 +90,27 @@ export async function POST(req) {
 
         // Update Webflow Contratos collection
         try {
-          const webflowUpdateResult = await fetch(
-            `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_CONTRACT_COLLECTION_ID}/items/live`,
-            {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
-              },
-              body: JSON.stringify({
-                fields: {
-                  memberstackid: memberstackId,
-                  name: contract.contractID,
-                  slug: contract.contractID,
-                }
-              }),
-            }
+          const webflowUpdateResult = await interactWithWebflow(
+            contract.contractID,
+            WEBFLOW_API_TOKEN,
+            WEBFLOW_CONTRACT_COLLECTION_ID,
+            Object.keys(contract),
+            Object.values(contract),
+            contract.PDFFile || null,
+            contract.DOCFile || null,
+            Object.values(contract),
+            null,  // sheets
+            null,  // spreadsheetId
+            null,  // sheetName
+            -1,    // rowIndex
+            Object.keys(contract).indexOf("Editlink")  // editlinkColumnIndex
           );
 
-          if (!webflowUpdateResult.ok) {
-            console.error(`Error updating Webflow contract ${contract.contractID}`);
+          if (!webflowUpdateResult.success) {
+            console.error(`Error updating Webflow contract ${contract.contractID}:`, webflowUpdateResult.error);
+            if (webflowUpdateResult.details) {
+              console.error('Details:', webflowUpdateResult.details);
+            }
           }
         } catch (webflowError) {
           console.error(`Error updating Webflow contract ${contract.contractID}:`, webflowError);
