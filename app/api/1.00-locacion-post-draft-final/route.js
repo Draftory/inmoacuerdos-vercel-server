@@ -85,17 +85,25 @@ export async function POST(req) {
     // Insertar o actualizar en Supabase
     try {
       // Primero obtenemos la estructura de la tabla
+      logger.info('Obteniendo estructura de la tabla');
       const { data: tableInfo, error: tableError } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
         .select('*')
         .limit(1);
 
       if (tableError) {
+        logger.error('Error al obtener estructura de la tabla:', {
+          error: tableError,
+          code: tableError.code,
+          message: tableError.message,
+          details: tableError.details
+        });
         throw tableError;
       }
 
       // Obtenemos las columnas existentes en la tabla
       const existingColumns = Object.keys(tableInfo[0] || {});
+      logger.info('Columnas existentes:', existingColumns);
 
       // Filtramos los datos para incluir solo las columnas que existen en la tabla
       const filteredData = Object.keys(supabaseData).reduce((acc, key) => {
@@ -104,36 +112,51 @@ export async function POST(req) {
         }
         return acc;
       }, {});
+      logger.info('Datos filtrados:', filteredData);
 
       // Verificamos si el registro existe
+      logger.info('Verificando registro existente para contractID:', contractID);
       const { data: existingRecord, error: checkError } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
         .select('draftVersion, Editlink')
         .eq('contractID', contractID)
         .single();
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 es el error cuando no se encuentra el registro
+      if (checkError && checkError.code !== 'PGRST116') {
+        logger.error('Error al verificar registro existente:', {
+          error: checkError,
+          code: checkError.code,
+          message: checkError.message,
+          details: checkError.details
+        });
         throw checkError;
       }
 
       let result;
       if (existingRecord) {
-        // Si existe, actualizamos el registro
+        logger.info('Actualizando registro existente');
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .update({
             ...filteredData,
             draftVersion: (existingRecord.draftVersion || 0) + 1,
-            // Si es un borrador y no hay Editlink en la request, usamos el existente
             Editlink: formData.Editlink || existingRecord.Editlink || `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
           })
           .eq('contractID', contractID)
           .select();
 
-        if (error) throw error;
+        if (error) {
+          logger.error('Error al actualizar registro:', {
+            error,
+            code: error.code,
+            message: error.message,
+            details: error.details
+          });
+          throw error;
+        }
         result = data;
       } else {
-        // Si no existe, creamos uno nuevo
+        logger.info('Creando nuevo registro');
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .insert([{
@@ -143,7 +166,15 @@ export async function POST(req) {
           }])
           .select();
 
-        if (error) throw error;
+        if (error) {
+          logger.error('Error al crear nuevo registro:', {
+            error,
+            code: error.code,
+            message: error.message,
+            details: error.details
+          });
+          throw error;
+        }
         result = data;
       }
 
