@@ -90,20 +90,26 @@ export async function POST(req) {
 
         // Update Webflow Contratos collection
         try {
+          // Create a copy of the contract with updated MemberstackID
+          const updatedContract = {
+            ...contract,
+            MemberstackID: memberstackId
+          };
+
           const webflowUpdateResult = await interactWithWebflow(
             contract.contractID,
             WEBFLOW_API_TOKEN,
             WEBFLOW_CONTRACT_COLLECTION_ID,
-            Object.keys(contract),
-            Object.values(contract),
-            contract.PDFFile || null,
-            contract.DOCFile || null,
-            Object.values(contract),
+            Object.keys(updatedContract),
+            Object.values(updatedContract),
+            updatedContract.PDFFile || null,
+            updatedContract.DOCFile || null,
+            Object.values(updatedContract),
             null,  // sheets
             null,  // spreadsheetId
             null,  // sheetName
             -1,    // rowIndex
-            Object.keys(contract).indexOf("Editlink")  // editlinkColumnIndex
+            Object.keys(updatedContract).indexOf("Editlink")  // editlinkColumnIndex
           );
 
           if (!webflowUpdateResult.success) {
@@ -111,6 +117,8 @@ export async function POST(req) {
             if (webflowUpdateResult.details) {
               console.error('Details:', webflowUpdateResult.details);
             }
+          } else {
+            console.log(`Successfully updated Webflow contract ${contract.contractID} with Memberstack ID: ${memberstackId}`);
           }
         } catch (webflowError) {
           console.error(`Error updating Webflow contract ${contract.contractID}:`, webflowError);
