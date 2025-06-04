@@ -71,50 +71,7 @@ export async function POST(req) {
       });
     }
 
-    // 1. Create a new user in Webflow Usuarios collection
-    const slug = memberstackId;
-    const webflowCreateUserPayload = {
-      isArchived: false,
-      isDraft: false,
-      fieldData: {
-        name: name,
-        slug: slug,
-        email: email
-      }
-    };
-    console.log('Webflow Create User Payload:', JSON.stringify(webflowCreateUserPayload, null, 2));
-
-    const createWebflowUserResponse = await fetch(
-      `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
-        },
-        body: JSON.stringify(webflowCreateUserPayload),
-      }
-    );
-
-    console.log('Webflow Create User Response Status:', createWebflowUserResponse.status);
-    let webflowUserData;
-    if (!createWebflowUserResponse.ok) {
-      const errorData = await createWebflowUserResponse.json();
-      console.error('Error creating Webflow user:', errorData);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create Webflow user.', details: errorData }),
-        {
-          status: createWebflowUserResponse.status,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    webflowUserData = await createWebflowUserResponse.json();
-    console.log('Webflow Create User Response Data:', JSON.stringify(webflowUserData, null, 2));
-    const webflowUserId = webflowUserData.id;
-
-    // 2. Update existing contracts with Memberstack ID
+    // 1. Update existing contracts with Memberstack ID
     if (existingContracts && existingContracts.length > 0) {
       console.log(`Found ${existingContracts.length} existing contracts for email ${email}`);
       
@@ -159,10 +116,53 @@ export async function POST(req) {
       }
     }
 
-    // 3. Update Memberstack member using @memberstack/admin
+    // 2. Create a new user in Webflow Usuarios collection
+    const slug = memberstackId;
+    const webflowCreateUserPayload = {
+      isArchived: false,
+      isDraft: false,
+      fieldData: {
+        name: name,
+        slug: slug,
+        email: email
+      }
+    };
+    console.log('Webflow Create User Payload:', JSON.stringify(webflowCreateUserPayload, null, 2));
+
+    const createWebflowUserResponse = await fetch(
+      `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
+        },
+        body: JSON.stringify(webflowCreateUserPayload),
+      }
+    );
+
+    console.log('Webflow Create User Response Status:', createWebflowUserResponse.status);
+    let webflowUserData;
+    if (!createWebflowUserResponse.ok) {
+      const errorData = await createWebflowUserResponse.json();
+      console.error('Error creating Webflow user:', errorData);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create Webflow user.', details: errorData }),
+        {
+          status: createWebflowUserResponse.status,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    webflowUserData = await createWebflowUserResponse.json();
+    console.log('Webflow Create User Response Data:', JSON.stringify(webflowUserData, null, 2));
+    const webflowUserId = webflowUserData.id;
+
+    // 3. Update Memberstack member with Webflow data
     const loginRedirectUrl = `/usuario/${memberstackId}`;
     try {
-      console.log('Attempting to update Memberstack member:', {
+      console.log('Updating Memberstack member with Webflow data:', {
         id: memberstackId,
         loginRedirect: loginRedirectUrl,
         webflowUserId
@@ -177,6 +177,7 @@ export async function POST(req) {
           },
         },
       });
+      
       console.log('Memberstack member updated successfully:', updatedMember);
       return new Response(JSON.stringify({ 
         success: true, 
@@ -190,7 +191,11 @@ export async function POST(req) {
     } catch (error) {
       console.error('Error updating Memberstack member:', error);
       return new Response(
-        JSON.stringify({ error: 'Failed to update Memberstack member.', details: error }),
+        JSON.stringify({ 
+          error: 'Failed to update Memberstack member.', 
+          details: error,
+          webflowUserId // Include the Webflow user ID in case we need to retry manually
+        }),
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },
