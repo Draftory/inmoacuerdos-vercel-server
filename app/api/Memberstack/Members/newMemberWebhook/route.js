@@ -182,7 +182,7 @@ export async function POST(req) {
         id: memberstackId,
         data: {
           loginRedirect: loginRedirectUrl,
-          metaData: {
+          customFields: {
             'Unique Webflow ID': webflowUserId,
           },
         },
