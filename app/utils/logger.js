@@ -35,12 +35,9 @@ function sanitizeData(data) {
 
 function formatLogMessage(level, contractID, message) {
   const prefix = LOG_PREFIXES[level];
-  const sanitizedMessage = sanitizeData(message);
-  const truncatedMessage = truncateMessage(sanitizedMessage);
-  
-  return contractID 
-    ? `${prefix} [${contractID}] ${truncatedMessage}`
-    : `${prefix} ${truncatedMessage}`;
+  const timestamp = new Date().toISOString();
+  const contractInfo = contractID ? `[ContractID: ${contractID}]` : '';
+  return `${prefix} ${timestamp} ${contractInfo} ${message}`;
 }
 
 export const logger = {

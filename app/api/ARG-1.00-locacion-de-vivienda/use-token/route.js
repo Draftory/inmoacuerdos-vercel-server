@@ -128,6 +128,7 @@ export async function POST(req) {
       .eq('MemberstackID', memberstackID);
 
     if (updateError) {
+      logger.error('Error al actualizar contrato', contractID);
       throw updateError;
     }
 
@@ -153,10 +154,9 @@ export async function POST(req) {
 
         if (appsScriptResponse.ok) {
           const appsScriptResponseData = await appsScriptResponse.json();
-          logger.info('Documentos generados', contractID);
+          logger.info('Documentos generados exitosamente', contractID);
           const pdfUrl = appsScriptResponseData?.pdfUrl;
           const docUrl = appsScriptResponseData?.docUrl;
-          logger.info(`Documentos generados para contractID: ${contractID}. PDF: ${!!pdfUrl}, DOC: ${!!docUrl}`);
 
           if (pdfUrl && docUrl) {
             // Actualizar URLs de documentos en Supabase
@@ -190,14 +190,11 @@ export async function POST(req) {
               if (webflowUpdateResult.success) {
                 logger.info('Webflow actualizado exitosamente', contractID);
               } else {
-                logger.error(`Error actualizando Webflow: ${webflowUpdateResult.error}`, contractID);
-                if (webflowUpdateResult.details) {
-                  logger.error(`Detalles del error: ${JSON.stringify(webflowUpdateResult.details)}`, contractID);
-                }
+                logger.error('Error actualizando Webflow', contractID);
               }
             }
 
-            // Enviar notificación por correo si hay emails
+            // Enviar notificación por correo
             let emailMember = contract.emailMember;
             let emailGuest = contract.emailGuest;
 
@@ -215,49 +212,28 @@ export async function POST(req) {
               logger.warn('No se enviará notificación por correo electrónico', contractID);
             }
           } else {
-            logger.error('No se recibieron URLs de documentos de AppScript', contractID);
-            if (appsScriptResponseData?.logs) {
-              logger.error('Logs de AppScript:', appsScriptResponseData.logs);
-            }
+            logger.error('No se recibieron URLs de documentos', contractID);
             return createResponse(
-              { 
-                error: "Error al generar documentos: No se recibieron URLs válidas",
-                logs: appsScriptResponseData?.logs || []
-              },
+              { error: "Error al generar documentos: No se recibieron URLs válidas" },
               500
             );
           }
         } else {
-          logger.error(
-            `[use-token] Error al generar documentos para contractID: ${contractID}. Status: ${appsScriptResponse.status}`
-          );
-          const errorData = await appsScriptResponse.json();
-          if (errorData?.logs) {
-            logger.error('Logs de AppScript:', errorData.logs);
-          }
+          logger.error('Error al generar documentos', contractID);
           return createResponse(
-            { 
-              error: `Error al generar documentos: ${errorData?.error || 'Error desconocido'}`,
-              logs: errorData?.logs || []
-            },
+            { error: "Error al generar documentos" },
             500
           );
         }
       } catch (error) {
-        logger.error(
-          `[use-token] Error al interactuar con Apps Script para contractID: ${contractID}:`,
-          error
-        );
+        logger.error('Error al interactuar con Apps Script', contractID);
         return createResponse(
-          { 
-            error: `Error al interactuar con Apps Script: ${error.message}`,
-            logs: []
-          },
+          { error: "Error al interactuar con Apps Script" },
           500
         );
       }
     } else if (contract.payment_id) {
-      logger.info('Pago existente encontrado, omitiendo generación y notificaciones', contractID);
+      logger.info('Pago existente encontrado', contractID);
     } else {
       logger.warn('No se generarán documentos, configuración faltante', contractID);
     }
@@ -291,7 +267,7 @@ export async function POST(req) {
       200
     );
   } catch (error) {
-    logger.error(`Error: ${error.message}`, contractID);
+    logger.error('Error en el proceso', contractID);
     return createResponse(
       { error: error.message },
       500

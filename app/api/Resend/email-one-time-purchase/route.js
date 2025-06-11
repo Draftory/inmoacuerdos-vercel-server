@@ -1,6 +1,7 @@
 // app/api/test-email/route.js
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
+import { logger } from '../../../utils/logger';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const senderName = "InmoAcuerdos"; // Define el nombre del remitente
@@ -12,6 +13,7 @@ export async function POST(req) {
       await req.json();
 
     if (!to || !subject || !linkPDF || !linkDOC || !contractTypeDescription) {
+      logger.error('Faltan parámetros obligatorios');
       return NextResponse.json(
         {
           error:
@@ -92,13 +94,11 @@ export async function POST(req) {
       <body>
         <div class="container">
           <div class="header">
-            <a href="https://inmoacuerdos.com" target="_blank" rel="noopener noreferrer">
-              <img src="https://ms-application-assets.s3.amazonaws.com/images/app_clk8u8rs900690tjx3j00e86h/675059-logo.png" alt="InmoAcuerdos Logo">
-            </a>
-            <h1>¡Gracias por usar InmoAcuerdos!</h1>
+            <img src="https://inmoacuerdos.com/images/logo.png" alt="InmoAcuerdos Logo" class="logo">
           </div>
           <div class="content">
-            <p>Hola ${name ? name : "Estimado/a usuario"},</p>
+            <h1>¡Tu ${contractTypeDescription} está listo!</h1>
+            <p>${name ? name : "Estimado/a usuario"},</p>
             <p>Hemos generado tu ${contractTypeDescription} con éxito. Podés descargarlo en los siguientes formatos:</p>
 
             <a href="${linkPDF}" class="btn">📄 Descargar en PDF</a>
@@ -128,12 +128,13 @@ export async function POST(req) {
       html: emailHtml,
     });
 
+    logger.info('Correo electrónico enviado exitosamente');
     return NextResponse.json(
       { message: "Correo electrónico enviado exitosamente!", data },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Error al enviar el correo electrónico:", error);
+    logger.error('Error al enviar el correo electrónico');
     return NextResponse.json(
       {
         error: "Error al enviar el correo electrónico con Resend.",

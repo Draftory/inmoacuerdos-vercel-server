@@ -35,32 +35,21 @@ export async function GET(req) {
       .select('*');
 
     if (error) {
-      logger.error(`Error Supabase: ${error.message}`);
+      logger.error('Error al obtener cláusulas');
       throw error;
     }
 
-    // Log para ver la estructura de los datos
-    logger.info('Primera cláusula recibida:', JSON.stringify(clauses[0]));
-
     // Transformar los datos al formato esperado por el frontend
-    const values = clauses.map(clause => {
-      // Log para ver cada cláusula individual
-      logger.info('Procesando cláusula:', JSON.stringify(clause));
-      
-      return [
-        clause.Placeholder || '', // Nombre del placeholder
-        clause["Value (inputValue)"] || '', // Valor/definición de la cláusula
-        clause.Clause || '' // Contenido de la cláusula
-      ];
-    });
+    const values = clauses.map(clause => [
+      clause.Placeholder || '',
+      clause["Value (inputValue)"] || '',
+      clause.Clause || ''
+    ]);
 
-    // Log para ver el resultado final
     logger.info(`Cláusulas obtenidas: ${values.length}`);
-    logger.info('Primera cláusula transformada:', JSON.stringify(values[0]));
-
     return NextResponse.json({ values }, { headers });
   } catch (error) {
-    logger.error(`Error: ${error.message}`);
+    logger.error('Error al procesar cláusulas');
     return NextResponse.error({ status: 500, headers });
   }
 }
