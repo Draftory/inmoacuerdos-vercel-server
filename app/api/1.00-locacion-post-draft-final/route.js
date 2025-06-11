@@ -19,6 +19,7 @@ export async function POST(req) {
     logger.info('Iniciando POST request');
     
     const origin = req.headers.get("origin");
+    logger.info(`Origin: ${origin}`);
     
     headers = {
       "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
@@ -33,18 +34,25 @@ export async function POST(req) {
       process.env.SUPABASE_ANON_KEY
     );
 
+    logger.info('Intentando parsear el body');
     const body = await req.json();
+    logger.info('Body recibido:', JSON.stringify(body, null, 2));
 
     // El body viene como array, tomamos el primer elemento
     const formData = Array.isArray(body) ? body[0] : body;
     const contractID = formData.contractID;
     const memberstackID = formData.MemberstackID;
 
-    logger.info('Procesando solicitud', contractID);
+    logger.info(`contractID: ${contractID}`);
+    logger.info(`memberstackID: ${memberstackID}`);
+    logger.info('formData:', JSON.stringify(formData, null, 2));
 
     // Solo validamos que exista el contractID
     if (!contractID) {
-      logger.error('Datos incompletos en la solicitud', contractID);
+      logger.error('Datos incompletos en la solicitud', {
+        hasContractID: !!contractID,
+        hasMemberstackID: !!memberstackID
+      });
       return NextResponse.json(
         { error: "Missing required field: contractID" },
         { status: 400, headers }
@@ -69,7 +77,12 @@ export async function POST(req) {
       }
     });
 
-    logger.info('Datos preparados para Supabase', contractID);
+    logger.info('Datos preparados para Supabase:', {
+      contractID,
+      memberstackID,
+      hasMemberstackID: !!supabaseData.MemberstackID,
+      dataKeys: Object.keys(supabaseData)
+    });
 
     // Si hay URLs de PDF o DOC, las agregamos
     if (formData.PDFFile) {
@@ -82,19 +95,25 @@ export async function POST(req) {
     // Insertar o actualizar en Supabase
     try {
       // Primero obtenemos la estructura de la tabla
-      logger.info('Obteniendo estructura de la tabla', contractID);
+      logger.info('Obteniendo estructura de la tabla');
       const { data: tableInfo, error: tableError } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
         .select('*')
         .limit(1);
 
       if (tableError) {
-        logger.error('Error al obtener estructura de la tabla', contractID);
+        logger.error('Error al obtener estructura de la tabla:', {
+          error: tableError,
+          code: tableError.code,
+          message: tableError.message,
+          details: tableError.details
+        });
         throw tableError;
       }
 
       // Obtenemos las columnas existentes en la tabla
       const existingColumns = Object.keys(tableInfo[0] || {});
+      logger.info('Columnas existentes:', existingColumns);
 
       // Filtramos los datos para incluir solo las columnas que existen en la tabla
       const filteredData = Object.keys(supabaseData).reduce((acc, key) => {
@@ -103,9 +122,10 @@ export async function POST(req) {
         }
         return acc;
       }, {});
+      logger.info('Datos filtrados:', filteredData);
 
       // Verificamos si el registro existe
-      logger.info('Verificando registro existente', contractID);
+      logger.info('Verificando registro existente para contractID:', contractID);
       const { data: existingRecord, error: checkError } = await supabase
         .from('1.00 - Contrato de Locación de Vivienda - Database')
         .select('draftVersion, Editlink')
@@ -113,13 +133,18 @@ export async function POST(req) {
         .single();
 
       if (checkError && checkError.code !== 'PGRST116') {
-        logger.error('Error al verificar registro existente', contractID);
+        logger.error('Error al verificar registro existente:', {
+          error: checkError,
+          code: checkError.code,
+          message: checkError.message,
+          details: checkError.details
+        });
         throw checkError;
       }
 
       let result;
       if (existingRecord) {
-        logger.info('Actualizando registro existente', contractID);
+        logger.info('Actualizando registro existente');
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .update({
@@ -131,12 +156,24 @@ export async function POST(req) {
           .select();
 
         if (error) {
-          logger.error('Error al actualizar registro', contractID);
+          logger.error('Error al actualizar registro:', {
+            error,
+            code: error.code,
+            message: error.message,
+            details: error.details
+          });
           throw error;
         }
         result = data;
       } else {
-        logger.info('Creando nuevo registro', contractID);
+        logger.info('Creando nuevo registro con datos:', {
+          contractID,
+          memberstackID,
+          hasMemberstackID: !!filteredData.MemberstackID,
+          filteredDataKeys: Object.keys(filteredData),
+          filteredDataValues: Object.values(filteredData),
+          tableName: '1.00 - Contrato de Locación de Vivienda - Database'
+        });
 
         // Log the exact data being sent to Supabase
         const insertData = {
@@ -144,6 +181,11 @@ export async function POST(req) {
           draftVersion: 1,
           Editlink: `https://inmoacuerdos.com/editor-documentos/1-00-locacion-de-vivienda?contractID=${contractID}`
         };
+        logger.info('Datos a insertar en Supabase:', {
+          data: JSON.stringify(insertData, null, 2),
+          keys: Object.keys(insertData),
+          values: Object.values(insertData)
+        });
 
         const { data, error } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
@@ -151,7 +193,20 @@ export async function POST(req) {
           .select();
 
         if (error) {
-          logger.error('Error al crear nuevo registro', contractID);
+          logger.error('Error al crear nuevo registro:', {
+            error: JSON.stringify(error),
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            data: JSON.stringify(insertData),
+            memberstackID: memberstackID,
+            hasMemberstackID: !!insertData.MemberstackID,
+            tableName: '1.00 - Contrato de Locación de Vivienda - Database',
+            operation: 'insert',
+            filteredDataKeys: Object.keys(insertData),
+            filteredDataValues: Object.values(insertData)
+          });
           throw error;
         }
         result = data;
@@ -188,33 +243,48 @@ export async function POST(req) {
       );
 
       if (!webflowResult.success) {
-        logger.error('Error actualizando Webflow', contractID);
         return NextResponse.json(
           { error: "Error updating Webflow", details: webflowResult.error },
           { status: 500, headers }
         );
       }
 
-      logger.info('Proceso completado exitosamente', contractID);
       return NextResponse.json(
         { 
-          message: "Draft saved successfully",
-          contractID: contractID,
-          result: result
+          success: true, 
+          data: result[0]
         },
-        { status: 200, headers }
+        { headers }
       );
-    } catch (error) {
-      logger.error('Error en el procesamiento', contractID);
+    } catch (supabaseError) {
+      logger.error('Error al interactuar con Supabase:', {
+        error: JSON.stringify(supabaseError),
+        message: supabaseError.message,
+        code: supabaseError.code,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
+        stack: supabaseError.stack,
+        data: JSON.stringify(supabaseData)
+      });
       return NextResponse.json(
-        { error: error.message },
+        { 
+          error: "Error saving to database", 
+          details: supabaseError.message,
+          code: supabaseError.code,
+          hint: supabaseError.hint
+        },
         { status: 500, headers }
       );
     }
+
   } catch (error) {
-    logger.error('Error en el procesamiento');
+    logger.error('Error en el proceso:', {
+      message: error.message,
+      stack: error.stack,
+      body: error.body
+    });
     return NextResponse.json(
-      { error: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500, headers }
     );
   }

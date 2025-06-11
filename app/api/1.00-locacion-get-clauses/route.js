@@ -35,7 +35,7 @@ export async function GET(req) {
       .select('*');
 
     if (error) {
-      logger.error('Error Supabase');
+      logger.error(`Error Supabase: ${error.message}`);
       throw error;
     }
 
@@ -60,7 +60,7 @@ export async function GET(req) {
 
     return NextResponse.json({ values }, { headers });
   } catch (error) {
-    logger.error('Error en el procesamiento');
+    logger.error(`Error: ${error.message}`);
     return NextResponse.error({ status: 500, headers });
   }
 }

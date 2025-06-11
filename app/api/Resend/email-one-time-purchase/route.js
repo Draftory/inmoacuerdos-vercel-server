@@ -129,14 +129,15 @@ export async function POST(req) {
     });
 
     return NextResponse.json(
-      { message: "Correo electrónico enviado exitosamente!" },
+      { message: "Correo electrónico enviado exitosamente!", data },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Error al enviar el correo electrónico");
+    console.error("Error al enviar el correo electrónico:", error);
     return NextResponse.json(
       {
         error: "Error al enviar el correo electrónico con Resend.",
+        details: error,
       },
       { status: 500 }
     );
