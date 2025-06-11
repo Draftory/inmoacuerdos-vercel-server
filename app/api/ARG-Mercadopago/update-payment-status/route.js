@@ -60,11 +60,12 @@ export async function POST(req) {
   let contractID;
   try {
     logger.info('Iniciando procesamiento de pago', contractID);
+
     const paymentData = await req.json();
     contractID = paymentData.contractID;
 
     if (!contractID) {
-      logger.error('contractID faltante');
+      logger.error('contractID faltante', contractID);
       return createResponse(
         { error: "contractID es requerido en el cuerpo de la solicitud." },
         400
@@ -111,7 +112,7 @@ export async function POST(req) {
         );
       }
 
-      logger.info('Estado del pago actualizado exitosamente', contractID);
+      logger.info('Estado del pago actualizado exitosamente en Supabase', contractID);
       
       // Preparar datos para Apps Script
       const dataToSendToAppsScript = {
@@ -133,9 +134,10 @@ export async function POST(req) {
 
         if (appsScriptResponse.ok) {
           const appsScriptResponseData = await appsScriptResponse.json();
-          logger.info('Documentos generados exitosamente', contractID);
+          logger.info('Documentos generados', contractID);
           const pdfUrl = appsScriptResponseData?.pdfUrl;
           const docUrl = appsScriptResponseData?.docUrl;
+          logger.info('Documentos generados', contractID);
 
           if (pdfUrl && docUrl) {
             // Actualizar URLs de documentos en Supabase
@@ -180,7 +182,7 @@ export async function POST(req) {
               }
             }
 
-            // Enviar notificación por correo
+            // Enviar notificación por correo si hay emails
             let emailMember = contract.emailMember;
             let emailGuest = contract.emailGuest;
 
@@ -198,34 +200,44 @@ export async function POST(req) {
               logger.warn('No se enviará notificación por correo electrónico', contractID);
             }
           } else {
-            logger.error('No se recibieron URLs de documentos', contractID);
+            logger.error('No se recibieron URLs de documentos de AppScript', contractID);
             return createResponse(
-              { error: "Error al generar documentos: No se recibieron URLs válidas" },
+              { 
+                error: "Error al generar documentos: No se recibieron URLs válidas",
+                logs: appsScriptResponseData?.logs || []
+              },
               500
             );
           }
         } else {
           logger.error('Error al generar documentos', contractID);
+          const errorData = await appsScriptResponse.json();
           return createResponse(
-            { error: "Error al generar documentos" },
+            { 
+              error: `Error al generar documentos: ${errorData?.error || 'Error desconocido'}`,
+              logs: errorData?.logs || []
+            },
             500
           );
         }
       } catch (error) {
         logger.error('Error al interactuar con Apps Script', contractID);
         return createResponse(
-          { error: "Error al interactuar con Apps Script" },
+          { 
+            error: `Error al interactuar con Apps Script: ${error.message}`,
+            logs: []
+          },
           500
         );
       }
     } else if (existingPaymentId) {
-      logger.info('Pago existente encontrado', contractID);
+      logger.info('Pago existente encontrado, omitiendo generación y notificaciones', contractID);
     }
 
     logger.info('Proceso completado', contractID);
     return createResponse(
       {
-        message: "Payment details updated successfully",
+        message: "Payment details updated successfully, document generation and follow-up initiated (if applicable).",
         paymentId: paymentData.payment_id,
         fechaDePago: paymentData.fechaDePago,
       },

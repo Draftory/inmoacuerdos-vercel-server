@@ -5,42 +5,51 @@
  */
 function fetchClausesFromVercel() {
     const CLAUSES_URL = 'https://inmoacuerdos-vercel-server.vercel.app/api/1.00-locacion-get-clauses';
-    logger.info('Iniciando petición de cláusulas');
+    Logger.log('fetchClausesFromVercel: Iniciando petición...');
     try {
         const response = UrlFetchApp.fetch(CLAUSES_URL);
+        Logger.log('fetchClausesFromVercel: Respuesta recibida. Código de estado: ' + response.getResponseCode());
         const clausesResponse = JSON.parse(response.getContentText());
+        Logger.log('fetchClausesFromVercel: Respuesta JSON parseada: ' + JSON.stringify(clausesResponse));
   
+        // Validamos que la respuesta tenga la estructura esperada: un array 'values'.
         if (!clausesResponse || !Array.isArray(clausesResponse.values)) {
-            logger.error('Formato de datos inválido recibido de Vercel');
+            Logger.log('fetchClausesFromVercel: Error - Formato de datos inválido recibido de Vercel. Se esperaba un array en "values".');
             return [];
         }
   
-        const clauses = clausesResponse.values.map(item => ({
-            placeholder: `{{${item[0]}}}`,
-            value: item[1] || '',
-            clauseText: item[2] || ''
-        }));
-
-        logger.info(`Cláusulas obtenidas: ${clauses.length}`);
+        // Mapeamos directamente los elementos de 'values' ya que la estructura es directa.
+        const clauses = clausesResponse.values.map(item => {
+            const clauseObject = {
+                placeholder: `{{${item[0]}}}`, // El primer elemento es el nombre del placeholder (ej. "PersonasLocador")
+                value: item[1] || '',           // El segundo elemento es el valor que activa esta cláusula (ej. "1PLocador")
+                clauseText: item[2] || ''       // El tercer elemento es el texto real de la cláusula
+            };
+            Logger.log('fetchClausesFromVercel: Cláusula procesada: ' + JSON.stringify(clauseObject));
+            return clauseObject;
+        });
+        Logger.log('fetchClausesFromVercel: Cláusulas obtenidas: ' + JSON.stringify(clauses));
         return clauses;
     } catch (error) {
-        logger.error('Error al obtener cláusulas');
+        Logger.log('fetchClausesFromVercel: Error - ' + error);
         return [];
     }
-}
+  }
   
-/**
-* Handles POST requests to the Apps Script web app.
-* This function is the entry point for external systems (like Vercel) to trigger document generation.
-* @param {Object} e The event object containing the POST data.
-* @returns {GoogleAppsScript.Content.TextOutput} A JSON response indicating success or failure.
-*/
-function doPost(e) {
-    const logMessages = [];
-    const log = (message, contractID) => {
-        logMessages.push(message);
-        logger.info(message, contractID);
+  /**
+  * Handles POST requests to the Apps Script web app.
+  * This function is the entry point for external systems (like Vercel) to trigger document generation.
+  * @param {Object} e The event object containing the POST data.
+  * @returns {GoogleAppsScript.Content.TextOutput} A JSON response indicating success or failure.
+  */
+  function doPost(e) {
+    const logMessages = []; // Este array capturará todos los mensajes de log
+    const log = (message) => {
+        logMessages.push(message); // Agrega el mensaje al array
+        Logger.log(message);      // Y también lo envía a los logs de Apps Script (si pudieras verlos)
     };
+  
+    log("doPost function executed for document generation.");
   
     try {
         const SCRIPT_PROPERTIES = PropertiesService.getScriptProperties();
@@ -52,16 +61,18 @@ function doPost(e) {
   
         const missingProperties = requiredProperties.filter(prop => !SCRIPT_PROPERTIES.getProperty(prop));
         if (missingProperties.length > 0) {
-            logger.error(`Propiedades requeridas faltantes: ${missingProperties.join(', ')}`);
+            log(`Error: Missing required script properties: ${missingProperties.join(', ')}`);
             return ContentService.createTextOutput(JSON.stringify({
                 "error": `Missing required script properties: ${missingProperties.join(', ')}`,
                 "logs": logMessages
             })).setMimeType(ContentService.MimeType.JSON);
         }
   
+        log("Script properties validated successfully");
+  
         const VERCEL_API_SECRET = SCRIPT_PROPERTIES.getProperty('VERCEL_API_SECRET');
         if (!VERCEL_API_SECRET) {
-            logger.error('VERCEL_API_SECRET no configurado');
+            log("Error: VERCEL_API_SECRET not configured in Apps Script.");
             return ContentService.createTextOutput(JSON.stringify({
                 "error": "Unauthorized",
                 "logs": logMessages
@@ -69,37 +80,43 @@ function doPost(e) {
         }
   
         if (!e || !e.postData || !e.postData.contents) {
-            logger.error('No se recibieron datos');
+            log("Error: No post data received.");
             return ContentService.createTextOutput(JSON.stringify({
                 "error": "No post data received.",
                 "logs": logMessages
             })).setMimeType(ContentService.MimeType.JSON);
         }
   
-        const requestData = JSON.parse(e.postData.contents);
+        const postData = e.postData.contents;
+        log(`Received post data: ${postData}`);
+  
+        const requestData = JSON.parse(postData);
         const { contractData, headers, secret } = requestData;
   
         if (!contractData || !headers || !Array.isArray(headers)) {
-            logger.error('Formato de datos inválido', contractData?.contractID);
+            log("Error: Invalid data format received from Vercel.");
             return ContentService.createTextOutput(JSON.stringify({
                 "error": "Invalid data format received from Vercel.",
                 "logs": logMessages
             })).setMimeType(ContentService.MimeType.JSON);
         }
-
+        log(`Processing request for contract ID: ${contractData.contractID}`);
+  
         if (secret !== VERCEL_API_SECRET) {
-            logger.error('Secreto inválido', contractData.contractID);
+            log(`Error: Invalid secret received: ${secret}`);
             return ContentService.createTextOutput(JSON.stringify({
                 "error": "Unauthorized",
                 "logs": logMessages
             })).setMimeType(ContentService.MimeType.JSON);
         }
   
-        logger.info('Iniciando generación de documentos', contractData.contractID);
+        log(`Generating documents for contract ID: ${contractData.contractID}`);
         const documentLinks = generateDocuments(contractData, headers, logMessages);
   
+        log(`Document generation completed. PDF URL: ${documentLinks.pdfUrl}, DOC URL: ${documentLinks.docUrl}`);
+  
         if (documentLinks.error) {
-            logger.error('Error en generación de documentos', contractData.contractID);
+            log(`Error during document generation: ${documentLinks.error}`);
             return ContentService.createTextOutput(JSON.stringify({
                 "error": documentLinks.error,
                 "logs": logMessages
@@ -411,67 +428,3 @@ function doPost(e) {
         };
     }
   }
-
-// AppScript logging utility
-const LOG_LEVELS = {
-  ERROR: 'ERROR',
-  WARN: 'WARN',
-  INFO: 'INFO',
-  DEBUG: 'DEBUG'
-};
-
-const LOG_PREFIXES = {
-  [LOG_LEVELS.ERROR]: '❌',
-  [LOG_LEVELS.WARN]: '⚠️',
-  [LOG_LEVELS.INFO]: 'ℹ️',
-  [LOG_LEVELS.DEBUG]: '🔍'
-};
-
-function formatLogMessage(level, contractID, message) {
-  const prefix = LOG_PREFIXES[level];
-  const timestamp = new Date().toISOString();
-  const contractInfo = contractID ? `[ContractID: ${contractID}]` : '';
-  return `${prefix} ${timestamp} ${contractInfo} ${message}`;
-}
-
-const logger = {
-  error: (message, contractID = null) => {
-    console.error(formatLogMessage(LOG_LEVELS.ERROR, contractID, message));
-  },
-
-  warn: (message, contractID = null) => {
-    console.warn(formatLogMessage(LOG_LEVELS.WARN, contractID, message));
-  },
-
-  info: (message, contractID = null) => {
-    console.info(formatLogMessage(LOG_LEVELS.INFO, contractID, message));
-  },
-
-  debug: (message, contractID = null) => {
-    console.debug(formatLogMessage(LOG_LEVELS.DEBUG, contractID, message));
-  }
-};
-
-// Example usage in your main function:
-function doPost(e) {
-  try {
-    const contractID = e.parameter.contractID;
-    logger.info('Iniciando generación de documentos', contractID);
-
-    // Your existing code here...
-
-    logger.info('Documentos generados exitosamente', contractID);
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      pdfUrl: pdfUrl,
-      docUrl: docUrl
-    })).setMimeType(ContentService.MimeType.JSON);
-
-  } catch (error) {
-    logger.error('Error en el proceso', contractID);
-    return ContentService.createTextOutput(JSON.stringify({
-      success: false,
-      error: 'Error al generar documentos'
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-}
