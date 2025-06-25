@@ -113,20 +113,16 @@ export async function POST(req) {
 
       // Obtenemos las columnas existentes en la tabla
       const existingColumns = Object.keys(tableInfo[0] || {});
-      logger.info('Columnas existentes:', existingColumns);
+      logger.info('Columnas existentes:', existingColumns.length);
 
       // Log missing keys in Supabase (input fields not present in Supabase columns)
       const inputKeys = Object.keys(supabaseData);
       const missingInSupabase = inputKeys.filter(key => !existingColumns.includes(key));
-      if (missingInSupabase.length > 0) {
-        logger.warn('Campos del input que NO existen en Supabase:', missingInSupabase);
-      }
+      logger.warn('Campos del input que NO existen en Supabase:', missingInSupabase);
 
       // Log missing keys in input (Supabase columns not present in input fields)
       const missingInInput = existingColumns.filter(key => !inputKeys.includes(key));
-      if (missingInInput.length > 0) {
-        logger.warn('Columnas de Supabase que NO están en el input:', missingInInput);
-      }
+      logger.warn('Columnas de Supabase que NO están en el input:', missingInInput);
 
       // Filtramos los datos para incluir solo las columnas que existen en la tabla
       const filteredData = Object.keys(supabaseData).reduce((acc, key) => {
@@ -135,7 +131,6 @@ export async function POST(req) {
         }
         return acc;
       }, {});
-      logger.info('Datos filtrados:', filteredData);
 
       // Verificamos si el registro existe
       logger.info('Verificando registro existente para contractID:', contractID);
