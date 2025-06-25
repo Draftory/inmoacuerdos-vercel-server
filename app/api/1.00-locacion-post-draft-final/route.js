@@ -36,7 +36,6 @@ export async function POST(req) {
 
     logger.info('Intentando parsear el body');
     const body = await req.json();
-    logger.info('Body recibido:', JSON.stringify(body, null, 2));
 
     // El body viene como array, tomamos el primer elemento
     const formData = Array.isArray(body) ? body[0] : body;
@@ -45,7 +44,6 @@ export async function POST(req) {
 
     logger.info(`contractID: ${contractID}`);
     logger.info(`memberstackID: ${memberstackID}`);
-    logger.info('formData:', JSON.stringify(formData, null, 2));
 
     // Solo validamos que exista el contractID
     if (!contractID) {
@@ -122,7 +120,7 @@ export async function POST(req) {
 
       // Log missing keys in input (Supabase columns not present in input fields)
       const missingInInput = existingColumns.filter(key => !inputKeys.includes(key));
-      logger.warn('Columnas de Supabase que NO están en el input:', missingInInput);
+      logger.warn('Columnas de Supabase que NO están en el input:', missingInInput, '⚠️ Recuerda: si no seleccionas radios o checkboxes en el formulario, esos campos no se envían y aparecerán aquí.');
 
       // Filtramos los datos para incluir solo las columnas que existen en la tabla
       const filteredData = Object.keys(supabaseData).reduce((acc, key) => {
