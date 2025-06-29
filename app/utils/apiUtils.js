@@ -23,6 +23,7 @@ export function mapFormDataToWebflowFields(formData) {
     slug: formData["contractID"] || "",
     domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
     ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
+    provinciainmueblelocado: formData["provinciaInmuebleLocado"] || null,
     nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
     denominacionlegallocatariopj1:
       formData["denominacionLegalLocatarioPJ1"] || null,
