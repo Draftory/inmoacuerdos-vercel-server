@@ -2,7 +2,7 @@
 import memberstackAdmin from "@memberstack/admin";
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
-import { interactWithWebflow } from '../../../../utils/apiUtils';
+import { interactWithWebflow, batchUpdateWebflowItems } from '../../../../utils/apiUtils';
 
 const WEBFLOW_API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const MEMBERSTACK_SECRET_KEY = process.env.MEMBERSTACK_SECRET_KEY;
@@ -76,8 +76,8 @@ export async function POST(req) {
     if (existingContracts && existingContracts.length > 0) {
       console.log(`Found ${existingContracts.length} existing contracts for email ${email}`);
       
-      for (const contract of existingContracts) {
-        // Update Supabase
+      // First, update all contracts in Supabase
+      const supabaseUpdatePromises = existingContracts.map(async (contract) => {
         const { error: updateError } = await supabase
           .from('1.00 - Contrato de Locación de Vivienda - Database')
           .update({ MemberstackID: memberstackId })
@@ -85,44 +85,105 @@ export async function POST(req) {
 
         if (updateError) {
           console.error(`Error updating contract ${contract.contractID}:`, updateError);
-          continue;
+          return { success: false, contractId: contract.contractID, error: updateError };
         }
+        return { success: true, contractId: contract.contractID };
+      });
 
-        // Update Webflow Contratos collection
+      const supabaseResults = await Promise.all(supabaseUpdatePromises);
+      const successfulSupabaseUpdates = supabaseResults.filter(result => result.success).length;
+      console.log(`Supabase updates completed: ${successfulSupabaseUpdates} successful`);
+
+      // Now get all existing Webflow items for these contracts
+      const webflowItemsToUpdate = [];
+      
+      for (const contract of existingContracts) {
         try {
-          // Create a copy of the contract with updated MemberstackID
-          const updatedContract = {
-            ...contract,
-            MemberstackID: memberstackId
-          };
-
-          const webflowUpdateResult = await interactWithWebflow(
-            contract.contractID,
-            WEBFLOW_API_TOKEN,
-            WEBFLOW_CONTRACT_COLLECTION_ID,
-            Object.keys(updatedContract),
-            Object.values(updatedContract),
-            updatedContract.PDFFile || null,
-            updatedContract.DOCFile || null,
-            Object.values(updatedContract),
-            null,  // sheets
-            null,  // spreadsheetId
-            null,  // sheetName
-            -1,    // rowIndex
-            Object.keys(updatedContract).indexOf("Editlink")  // editlinkColumnIndex
+          // Search for existing Webflow item
+          const searchUrl = new URL(
+            `https://api.webflow.com/v2/collections/${WEBFLOW_CONTRACT_COLLECTION_ID}/items`
           );
+          searchUrl.searchParams.set('name', contract.contractID);
 
-          if (!webflowUpdateResult.success) {
-            console.error(`Error updating Webflow contract ${contract.contractID}:`, webflowUpdateResult.error);
-            if (webflowUpdateResult.details) {
-              console.error('Details:', webflowUpdateResult.details);
-            }
-          } else {
-            console.log(`Successfully updated Webflow contract ${contract.contractID} with Memberstack ID: ${memberstackId}`);
+          const listItemsResponse = await fetch(searchUrl.toString(), {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
+              "accept-version": "2.0.0",
+            },
+          });
+
+          const listItemsData = await listItemsResponse.json();
+
+          if (listItemsData.items && listItemsData.items.length > 0) {
+            const existingItem = listItemsData.items[0];
+            
+            // Create updated field data
+            const updatedContract = {
+              ...contract,
+              MemberstackID: memberstackId
+            };
+
+            const formData = {};
+            Object.keys(updatedContract).forEach(key => {
+              formData[key] = updatedContract[key];
+            });
+
+            const fieldData = {
+              editlink: formData["Editlink"] || null,
+              denominacionlegallocadorpj1: formData["denominacionLegalLocadorPJ1"] || null,
+              nombrelocatariopf1: formData["nombreLocatarioPF1"] || null,
+              timestamp: formData["timestamp"] || null,
+              status: formData["status"] || null,
+              contrato: formData["Contrato"] || null,
+              memberstackid: formData["MemberstackID"] || null,
+              name: formData["contractID"] || "",
+              slug: formData["contractID"] || "",
+              domicilioinmueblelocado: formData["domicilioInmuebleLocado"] || null,
+              ciudadinmueblelocado: formData["ciudadInmuebleLocado"] || null,
+              provinciainmueblelocado: formData["provinciaInmuebleLocado"] || null,
+              nombrelocadorpf1: formData["nombreLocadorPF1"] || null,
+              denominacionlegallocatariopj1: formData["denominacionLegalLocatarioPJ1"] || null,
+              pdffile: formData["PDFFile"] || null,
+              docfile: formData["DOCFile"] || null,
+              hiddeninputlocacionfechainicio: formData["hiddenInputLocacionFechaInicio"] || null,
+              hiddeninputlocacionfechatermino: formData["hiddenInputLocacionFechaTermino"] || null,
+              personaslocador: formData["PersonasLocador"] || null,
+              personaslocatario: formData["PersonasLocatario"] || null,
+              pago: formData["pago"] || null,
+              linkdepago: formData["linkdepago"] || null
+            };
+
+            webflowItemsToUpdate.push({
+              id: existingItem.id,
+              fieldData: fieldData
+            });
           }
-        } catch (webflowError) {
-          console.error(`Error updating Webflow contract ${contract.contractID}:`, webflowError);
+        } catch (error) {
+          console.error(`Error preparing Webflow update for contract ${contract.contractID}:`, error);
         }
+      }
+
+      // Perform batch update if we have items to update
+      if (webflowItemsToUpdate.length > 0) {
+        console.log(`Preparing to batch update ${webflowItemsToUpdate.length} Webflow items`);
+        
+        const batchResult = await batchUpdateWebflowItems(
+          webflowItemsToUpdate,
+          WEBFLOW_API_TOKEN,
+          WEBFLOW_CONTRACT_COLLECTION_ID
+        );
+
+        if (batchResult.success) {
+          console.log(`Successfully batch updated ${batchResult.updatedCount} Webflow contracts with Memberstack ID: ${memberstackId}`);
+        } else {
+          console.error('Error in batch Webflow update:', batchResult.error);
+          if (batchResult.details) {
+            console.error('Details:', batchResult.details);
+          }
+        }
+      } else {
+        console.log('No Webflow items found to update');
       }
     }
 
@@ -139,38 +200,82 @@ export async function POST(req) {
     };
     console.log('Webflow Create User Payload:', JSON.stringify(webflowCreateUserPayload, null, 2));
 
-    const createWebflowUserResponse = await fetch(
-      `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
-        },
-        body: JSON.stringify(webflowCreateUserPayload),
-      }
-    );
-
-    console.log('Webflow Create User Response Status:', createWebflowUserResponse.status);
+    // Add retry logic for Webflow user creation
+    let createWebflowUserResponse;
     let webflowUserData;
-    if (!createWebflowUserResponse.ok) {
-      const errorData = await createWebflowUserResponse.json();
-      console.error('Error creating Webflow user:', errorData);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create Webflow user.', details: errorData }),
-        {
-          status: createWebflowUserResponse.status,
-          headers: { 'Content-Type': 'application/json' },
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        createWebflowUserResponse = await fetch(
+          `${WEBFLOW_API_BASE_URL}/${WEBFLOW_API_VERSION}/collections/${WEBFLOW_USER_COLLECTION_ID}/items/live`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${WEBFLOW_API_TOKEN}`,
+            },
+            body: JSON.stringify(webflowCreateUserPayload),
+          }
+        );
+
+        console.log('Webflow Create User Response Status:', createWebflowUserResponse.status);
+        
+        if (createWebflowUserResponse.status === 429) {
+          // Rate limited, wait and retry
+          const waitTime = Math.pow(2, retryCount) * 1000; // Exponential backoff
+          console.log(`Rate limited, waiting ${waitTime}ms before retry ${retryCount + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          retryCount++;
+          continue;
         }
-      );
+
+        if (!createWebflowUserResponse.ok) {
+          const errorData = await createWebflowUserResponse.json();
+          console.error('Error creating Webflow user:', errorData);
+          
+          if (retryCount < maxRetries - 1) {
+            const waitTime = Math.pow(2, retryCount) * 1000;
+            console.log(`Retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            retryCount++;
+            continue;
+          }
+          
+          return new Response(
+            JSON.stringify({ error: 'Failed to create Webflow user after retries.', details: errorData }),
+            {
+              status: createWebflowUserResponse.status,
+              headers: { 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        webflowUserData = await createWebflowUserResponse.json();
+        console.log('Webflow Create User Response Data:', JSON.stringify(webflowUserData, null, 2));
+        break; // Success, exit retry loop
+        
+      } catch (error) {
+        console.error(`Error in Webflow user creation attempt ${retryCount + 1}:`, error);
+        if (retryCount < maxRetries - 1) {
+          const waitTime = Math.pow(2, retryCount) * 1000;
+          console.log(`Retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          retryCount++;
+          continue;
+        }
+        throw error;
+      }
     }
 
-    webflowUserData = await createWebflowUserResponse.json();
-    console.log('Webflow Create User Response Data:', JSON.stringify(webflowUserData, null, 2));
     const webflowUserId = webflowUserData.id;
 
     // 3. Update Memberstack member with Webflow data
     const loginRedirectUrl = `/usuario/${memberstackId}`;
+    let memberstackUpdateSuccess = false;
+    let memberstackError = null;
+    
     try {
       console.log('Updating Memberstack member with Webflow data:', {
         id: memberstackId,
@@ -189,29 +294,30 @@ export async function POST(req) {
       });
       
       console.log('Memberstack member updated successfully:', updatedMember);
-      return new Response(JSON.stringify({ 
-        success: true, 
-        webflowUserId, 
-        loginRedirectUrl,
-        existingContractsUpdated: existingContracts?.length || 0 
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      memberstackUpdateSuccess = true;
     } catch (error) {
       console.error('Error updating Memberstack member:', error);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to update Memberstack member.', 
-          details: error,
-          webflowUserId // Include the Webflow user ID in case we need to retry manually
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
+      memberstackError = error;
+      
+      // Don't fail the entire webhook if Memberstack update fails
+      // The main operations (Supabase and Webflow) are working
     }
+
+    // Return success even if Memberstack update fails
+    return new Response(JSON.stringify({ 
+      success: true, 
+      webflowUserId, 
+      loginRedirectUrl,
+      existingContractsUpdated: existingContracts?.length || 0,
+      memberstackUpdateSuccess,
+      memberstackError: memberstackError ? {
+        message: memberstackError.message,
+        code: memberstackError.code
+      } : null
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Webhook error:', error);
     return new Response(

@@ -302,3 +302,74 @@ export async function sendEmailNotification(
     await sendSingleEmail(toEmailGuest);
   }
 }
+
+/**
+ * Batch update multiple Webflow items in a single API call
+ * @param {Array<Object>} items - Array of items to update with {id, fieldData}
+ * @param {string} webflowApiToken - Webflow API authentication token
+ * @param {string} webflowCollectionId - ID of the Webflow collection
+ * @returns {Object} Result of the batch operation
+ */
+export async function batchUpdateWebflowItems(items, webflowApiToken, webflowCollectionId) {
+  if (!webflowApiToken || !webflowCollectionId) {
+    logger.warn('Config Webflow incompleta para batch update');
+    return { success: false, error: 'Incomplete Webflow configuration' };
+  }
+
+  if (!items || items.length === 0) {
+    return { success: true, data: [], message: 'No items to update' };
+  }
+
+  try {
+    // Prepare batch update payload
+    const batchPayload = {
+      items: items.map(item => ({
+        id: item.id,
+        fieldData: item.fieldData,
+        isArchived: false,
+        isDraft: false
+      }))
+    };
+
+    const batchUrl = `https://api.webflow.com/v2/collections/${webflowCollectionId}/items/batch`;
+    
+    const batchResponse = await fetch(batchUrl, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${webflowApiToken}`,
+        "accept-version": "2.0.0",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(batchPayload),
+    });
+
+    const batchResult = await batchResponse.json();
+
+    if (!batchResponse.ok) {
+      logger.error('Error en batch update de Webflow', { 
+        status: batchResponse.status, 
+        result: batchResult 
+      });
+      return { 
+        success: false, 
+        error: 'Webflow batch API error', 
+        details: batchResult 
+      };
+    }
+
+    logger.info(`Batch update completado: ${items.length} items actualizados`);
+    return { 
+      success: true, 
+      data: batchResult,
+      updatedCount: items.length
+    };
+
+  } catch (error) {
+    logger.error(`Error en batch update de Webflow: ${error.message}`);
+    return { 
+      success: false, 
+      error: 'Webflow batch interaction error', 
+      details: error.message 
+    };
+  }
+}
