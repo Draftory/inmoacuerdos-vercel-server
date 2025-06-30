@@ -34,7 +34,8 @@ export function mapFormDataToWebflowFields(formData) {
     hiddeninputlocacionfechatermino:
       formData["hiddenInputLocacionFechaTermino"] || null,
     personaslocador: formData["PersonasLocador"] || null,
-    personaslocatario: formData["PersonasLocatario"] || null
+    personaslocatario: formData["PersonasLocatario"] || null,
+    pago: formData["pago"] || null
   };
 }
 

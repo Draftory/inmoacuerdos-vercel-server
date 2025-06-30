@@ -171,20 +171,26 @@ export async function POST(req) {
 
             // Actualizar Webflow
             if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_CONTRACT_COLLECTION_ID) {
+              // Crear una copia del contrato con el campo pago actualizado
+              const contractWithPayment = {
+                ...contract,
+                pago: 'si'
+              };
+              
               const webflowUpdateResult = await interactWithWebflow(
                 contractID,
                 process.env.WEBFLOW_API_TOKEN,
                 process.env.WEBFLOW_CONTRACT_COLLECTION_ID,
-                Object.keys(contract),
-                Object.values(contract),
+                Object.keys(contractWithPayment),
+                Object.values(contractWithPayment),
                 pdfUrl,
                 docUrl,
-                Object.values(contract),
+                Object.values(contractWithPayment),
                 null,
                 null,
                 null,
                 null,
-                Object.keys(contract).indexOf("Editlink")
+                Object.keys(contractWithPayment).indexOf("Editlink")
               );
               
               if (webflowUpdateResult.success) {
