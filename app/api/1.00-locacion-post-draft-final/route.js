@@ -240,8 +240,8 @@ export async function POST(req) {
       }
       
       // Agregar la URL de payment a los datos que se envían a Webflow
-      formData.linkpago = urlPago;
-      formDataKeys.push('linkpago');
+      formData.linkdepago = urlPago;
+      formDataKeys.push('linkdepago');
       formDataValues.push(urlPago);
       
       const editlinkIndex = formDataKeys.indexOf('Editlink');

@@ -36,7 +36,7 @@ export function mapFormDataToWebflowFields(formData) {
     personaslocador: formData["PersonasLocador"] || null,
     personaslocatario: formData["PersonasLocatario"] || null,
     pago: formData["pago"] || null,
-    linkpago: formData["linkpago"] || null
+    linkdepago: formData["linkdepago"] || null
   };
 }
 
