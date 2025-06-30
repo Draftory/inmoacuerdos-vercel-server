@@ -230,6 +230,20 @@ export async function POST(req) {
         formDataValues.push(editlinkValue);
       }
       
+      // Construir la URL de payment
+      const Contrato = formData.Contrato || '1.00 - Contrato de Locación de Vivienda';
+      const MemberstackID = formData.MemberstackID || '';
+      
+      let urlPago = `https://www.inmoacuerdos.com/editor-documentos/payment?contractID=${encodeURIComponent(contractID)}&Contrato=${encodeURIComponent(Contrato)}`;
+      if (MemberstackID) {
+        urlPago += `&MemberstackID=${encodeURIComponent(MemberstackID)}`;
+      }
+      
+      // Agregar la URL de payment a los datos que se envían a Webflow
+      formData.linkpago = urlPago;
+      formDataKeys.push('linkpago');
+      formDataValues.push(urlPago);
+      
       const editlinkIndex = formDataKeys.indexOf('Editlink');
       
       const webflowResult = await interactWithWebflow(
