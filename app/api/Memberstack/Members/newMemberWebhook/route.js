@@ -158,6 +158,8 @@ export async function POST(req) {
               id: existingItem.id,
               fieldData: fieldData
             });
+          } else {
+            console.log(`No Webflow item found for contract ${contract.contractID}`);
           }
         } catch (error) {
           console.error(`Error preparing Webflow update for contract ${contract.contractID}:`, error);
@@ -205,6 +207,8 @@ export async function POST(req) {
     let webflowUserData;
     let retryCount = 0;
     const maxRetries = 3;
+    let webflowUserCreated = false;
+    let webflowUserId = null;
 
     while (retryCount < maxRetries) {
       try {
@@ -243,17 +247,15 @@ export async function POST(req) {
             continue;
           }
           
-          return new Response(
-            JSON.stringify({ error: 'Failed to create Webflow user after retries.', details: errorData }),
-            {
-              status: createWebflowUserResponse.status,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          );
+          // Don't fail the entire webhook, just log the error and continue
+          console.error('Failed to create Webflow user after all retries. Continuing with webhook...');
+          break;
         }
 
         webflowUserData = await createWebflowUserResponse.json();
         console.log('Webflow Create User Response Data:', JSON.stringify(webflowUserData, null, 2));
+        webflowUserCreated = true;
+        webflowUserId = webflowUserData.id;
         break; // Success, exit retry loop
         
       } catch (error) {
@@ -265,11 +267,30 @@ export async function POST(req) {
           retryCount++;
           continue;
         }
-        throw error;
+        console.error('Failed to create Webflow user after all retries. Continuing with webhook...');
+        break;
       }
     }
 
-    const webflowUserId = webflowUserData.id;
+    // Only proceed with Memberstack update if we successfully created the Webflow user
+    if (!webflowUserCreated) {
+      console.log('Skipping Memberstack update due to Webflow user creation failure');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        webflowUserId: null,
+        loginRedirectUrl: `/usuario/${memberstackId}`,
+        existingContractsUpdated: existingContracts?.length || 0,
+        memberstackUpdateSuccess: false,
+        memberstackError: {
+          message: 'Webflow user creation failed due to rate limiting',
+          code: 'webflow_rate_limit'
+        },
+        warning: 'Webflow user creation failed, but Supabase updates were successful'
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // 3. Update Memberstack member with Webflow data
     const loginRedirectUrl = `/usuario/${memberstackId}`;
