@@ -52,7 +52,7 @@ export async function POST(req) {
 
     if (Contrato === "Locación de vivienda") {
       adjustedTitle = "Contrato de locación de vivienda";
-      adjustedPrice = 8499;
+      adjustedPrice = 4999;
       tipoDePago = "Contrato Individual";
     }
 
