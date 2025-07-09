@@ -15,7 +15,11 @@ export async function POST(req) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
+  // Log incoming POST request
   try {
+    logger.info('POST /api/1.00-locacion-post-draft-final called');
+    logger.info('Request headers:', Object.fromEntries(req.headers.entries()));
+    
     logger.info('Iniciando POST request');
     
     const origin = req.headers.get("origin");
@@ -319,6 +323,11 @@ export async function OPTIONS(req) {
     "Access-Control-Allow-Methods": "POST",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
+
+  // Log incoming OPTIONS request
+  logger.info('OPTIONS /api/1.00-locacion-post-draft-final called');
+  logger.info('Request headers:', Object.fromEntries(req.headers.entries()));
+  logger.info('Responding with headers:', headers);
 
   return new NextResponse(null, { headers });
 }
