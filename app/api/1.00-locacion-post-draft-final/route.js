@@ -326,8 +326,8 @@ export async function OPTIONS(req) {
 
   // Log incoming OPTIONS request
   logger.info('OPTIONS /api/1.00-locacion-post-draft-final called');
-  logger.info('Request headers:', Object.fromEntries(req.headers.entries()));
-  logger.info('Responding with headers:', headers);
+  logger.info('Request headers: ' + JSON.stringify(Object.fromEntries(req.headers.entries())));
+  logger.info('Responding with headers: ' + JSON.stringify(headers));
 
   return new NextResponse(null, { headers });
 }
