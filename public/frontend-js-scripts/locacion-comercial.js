@@ -1,7 +1,3 @@
-<!-- Google Tag Manager (noscript) -->
-<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M64NBT3J"
-height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-<!-- End Google Tag Manager (noscript) -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const caucionCheckbox = document.querySelector('input[name="caucion"]');
@@ -224,13 +220,16 @@ function getBuenosAiresTimestamp() {
     }).replace(/\./g, '/'); // Reemplaza los puntos por barras para el formato dd/mm/aaaa
 }
 
-// Function to handle saving as draft/final (INTEGRATED WITH VALIDATION)
+// Script 2: Función saveContractVersion (global)
 async function saveContractVersion(event, status, redirectUrl = "/success") {
     if (event) event.preventDefault();
 
-    const formElement = document.querySelector("#wf-form-1-00---Locacion-de-vivienda");
+    const formElement = document.querySelector('form[name="wf-form-1-00---Locacion-de-vivienda"]');
+    if (!formElement) {
+        console.error('Error: Formulario no encontrado en saveContractVersion.');
+        return;
+    }
     
-    // Manually build form object to exclude unchecked checkboxes
     const formObject = {};
     const formElements = formElement.elements;
     
@@ -238,32 +237,25 @@ async function saveContractVersion(event, status, redirectUrl = "/success") {
         const element = formElements[i];
         if (element.name && element.name.trim() !== '') {
             if (element.type === 'checkbox') {
-                // Only include checked checkboxes
                 if (element.checked) {
-                    // If checkbox has a value, use it; otherwise use true
                     formObject[element.name] = element.value || true;
                 }
-                // If unchecked, don't include it at all
             } else if (element.type === 'radio') {
-                // Only include checked radio buttons
                 if (element.checked) {
                     formObject[element.name] = element.value;
                 }
             } else {
-                // Include all other form elements
                 formObject[element.name] = element.value;
             }
         }
     }
 
-    // **Lógica de validación de campos obligatorios**
-    const camposRequeridos = formElement.querySelectorAll('input[required], select[required], textarea[required]'); // Todos los tipos
+    const camposRequeridos = formElement.querySelectorAll('input[required], select[required], textarea[required]');
 
     let todosCompletos = true;
 
     camposRequeridos.forEach(campo => {
         if (campo.type === 'radio') {
-            // Validación de radio buttons: verifica que al menos uno esté seleccionado en el grupo
             const radioGroup = formElement.querySelectorAll(`input[type="radio"][name="${campo.name}"]`);
             let radioSelected = false;
             radioGroup.forEach(radio => {
@@ -274,7 +266,6 @@ async function saveContractVersion(event, status, redirectUrl = "/success") {
             if (!radioSelected) {
                 todosCompletos = false;
                 console.error(`El grupo de radio buttons "${campo.name}" es obligatorio.`);
-                // Agrega la clase de error al primer radio del grupo para marcar el grupo como erroneo
                 if (radioGroup.length > 0) {
                     radioGroup[0].classList.add('error-requerido');
                 }
@@ -298,15 +289,11 @@ async function saveContractVersion(event, status, redirectUrl = "/success") {
         }
     });
 
-    // Si no todos los campos obligatorios están completos, muestra la alerta y detiene la función
     if (!todosCompletos) {
         alert('Por favor, completa todos los campos obligatorios.');
-        return; // Detiene la ejecución de la función aquí
+        return;
     }
 
-    // **Continuación de la función si la validación es exitosa**
-
-    // Asegúrate de que contractID exista
     if (!formObject.contractID) {
         alert("No contract ID found. Por favor, interactúa con el formulario para generar un ID.");
         return;
@@ -315,7 +302,12 @@ async function saveContractVersion(event, status, redirectUrl = "/success") {
     formObject.draftVersion = parseInt(formObject.draftVersion) || 1;
     formObject.status = status;
     formElement.querySelector("input[name='status']").value = status;
-    formObject.timestamp = getBuenosAiresTimestamp(); // Usa la función corregida
+    if (typeof getBuenosAiresTimestamp === 'function') {
+        formObject.timestamp = getBuenosAiresTimestamp(); 
+    } else {
+        console.warn('getBuenosAiresTimestamp() no está definido. Usando new Date().toISOString()');
+        formObject.timestamp = new Date().toISOString();
+    }
 
     console.log("Form Object (Client-Side):", formObject);
 
@@ -331,11 +323,22 @@ async function saveContractVersion(event, status, redirectUrl = "/success") {
         });
 
         if (response.ok) {
+            // *** ¡Aquí la invocación a la función del otro script! ***
+            // Verifica que la función global exista antes de llamarla
+            if (typeof window.clearAndReloadForm === 'function') {
+                window.clearAndReloadForm(); 
+            } else {
+                console.error('Error: clearAndReloadForm no está definida o no es accesible.');
+                // En caso de que no se pueda recargar, al menos informa.
+                alert('Guardado exitoso, pero no se pudo reiniciar el formulario. Recargue manualmente si lo desea.');
+            }
+            
             const result = await response.json();
             if (status === "Contrato") {
-                window.location.href = redirectUrl;
+                // Si la URL es diferente, esto podría "ganar" a la recarga de clearAndReloadForm
+                window.location.href = redirectUrl; 
             } else if (status === "Borrador") {
-                alert("Guardado como borrador. Redirigiendo...");
+                alert("Guardado como borrador. Redirigiendo..."); 
                 const loginRedirectButton = document.querySelector('#mis-contratos[data-ms-action="login-redirect"]');
                 if (loginRedirectButton) {
                     loginRedirectButton.click();
@@ -345,6 +348,7 @@ async function saveContractVersion(event, status, redirectUrl = "/success") {
                 }
             }
             formElement.querySelector("input[name='draftVersion']").value = formObject.draftVersion + 1;
+
         } else {
             console.error("Error guardando " + status + ":", response.statusText);
             alert("Error guardando " + status + ".");

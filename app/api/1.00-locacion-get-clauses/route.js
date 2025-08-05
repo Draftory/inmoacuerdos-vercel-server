@@ -2,25 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from "next/server";
 import { logger } from '../../utils/logger';
 
-// List of allowed origins
-const allowedOrigins = [
-  "https://www.inmoacuerdos.com",
-  "https://inmoacuerdos.webflow.io",
-];
-
 export async function GET(req) {
   let headers = {
-    "Access-Control-Allow-Origin": allowedOrigins[0],
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   try {
-    const origin = req.headers.get("origin");
     headers = {
-      "Access-Control-Allow-Origin": allowedOrigins.includes(origin)
-        ? origin
-        : allowedOrigins[0],
+      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
